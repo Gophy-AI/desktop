@@ -30,7 +30,7 @@ final class DatabaseTests: XCTestCase {
         try dbQueue.read { db in
             let appliedMigrations = try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
 
-            XCTAssertEqual(appliedMigrations.count, 7, "Should have 7 migrations applied")
+            XCTAssertEqual(appliedMigrations.count, 8, "Should have 8 migrations applied")
             XCTAssertTrue(appliedMigrations.contains("v1_create_meetings"), "Should have meetings migration")
             XCTAssertTrue(appliedMigrations.contains("v2_create_transcript_segments"), "Should have transcript_segments migration")
             XCTAssertTrue(appliedMigrations.contains("v3_create_documents"), "Should have documents migration")
@@ -38,6 +38,7 @@ final class DatabaseTests: XCTestCase {
             XCTAssertTrue(appliedMigrations.contains("v5_create_chat_messages"), "Should have chat_messages migration")
             XCTAssertTrue(appliedMigrations.contains("v6_create_settings"), "Should have settings migration")
             XCTAssertTrue(appliedMigrations.contains("v7_create_embeddings"), "Should have embeddings migration")
+            XCTAssertTrue(appliedMigrations.contains("v8_create_embedding_id_mapping"), "Should have embedding_id_mapping migration")
         }
     }
 
@@ -303,7 +304,7 @@ final class DatabaseTests: XCTestCase {
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(firstCount, 7, "First database should have 7 migrations")
+        XCTAssertEqual(firstCount, 8, "First database should have 8 migrations")
 
         let secondDB = try GophyDatabase(storageManager: storageManager)
         let secondDBQueue = try secondDB.dbQueue
@@ -312,6 +313,26 @@ final class DatabaseTests: XCTestCase {
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(secondCount, 7, "Second database should still have 7 migrations")
+        XCTAssertEqual(secondCount, 8, "Second database should still have 8 migrations")
+    }
+
+    func testEmbeddingIdMappingTableCreated() throws {
+        let dbQueue = try database.dbQueue
+
+        try dbQueue.read { db in
+            let tableExists = try Bool.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='embedding_id_mapping'"
+            ) ?? false
+
+            XCTAssertTrue(tableExists, "embedding_id_mapping table should exist")
+
+            let indexExists = try Bool.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_embedding_id_mapping_chunk_id'"
+            ) ?? false
+
+            XCTAssertTrue(indexExists, "idx_embedding_id_mapping_chunk_id index should exist")
+        }
     }
 }

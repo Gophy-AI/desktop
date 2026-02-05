@@ -112,6 +112,14 @@ public final class GophyDatabase: Sendable {
                 """)
         }
 
+        migrator.registerMigration("v8_create_embedding_id_mapping") { db in
+            try db.create(table: "embedding_id_mapping") { t in
+                t.column("rowid", .integer).primaryKey()
+                t.column("chunk_id", .text).notNull().unique()
+            }
+            try db.create(index: "idx_embedding_id_mapping_chunk_id", on: "embedding_id_mapping", columns: ["chunk_id"])
+        }
+
         return migrator
     }
 }
