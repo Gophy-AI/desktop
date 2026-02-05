@@ -3,10 +3,16 @@ import SwiftUI
 @main
 struct GophyApp: App {
     @State private var selectedItem: SidebarItem? = .meetings
+    @State private var showOnboarding: Bool = !OnboardingViewModel.hasCompletedOnboarding()
 
     var body: some Scene {
         WindowGroup {
             ContentView(selectedItem: $selectedItem)
+                .sheet(isPresented: $showOnboarding) {
+                    OnboardingView {
+                        showOnboarding = false
+                    }
+                }
         }
         .windowStyle(.automatic)
         .commands {
@@ -14,6 +20,13 @@ struct GophyApp: App {
                 Button("About Gophy") {
                     NSApplication.shared.orderFrontStandardAboutPanel()
                 }
+            }
+
+            CommandGroup(after: .newItem) {
+                Button("New Meeting") {
+                    selectedItem = .meetings
+                }
+                .keyboardShortcut("n", modifiers: .command)
             }
         }
 
@@ -40,6 +53,7 @@ struct GophyApp: App {
 @MainActor
 struct ContentView: View {
     @Binding var selectedItem: SidebarItem?
+    @FocusState private var focusedField: String?
 
     var body: some View {
         NavigationSplitView {
@@ -61,6 +75,39 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .onAppear {
+            setupKeyboardShortcuts()
+        }
+    }
+
+    private func setupKeyboardShortcuts() {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.modifierFlags.contains(.command) {
+                switch event.charactersIgnoringModifiers {
+                case "1":
+                    selectedItem = .meetings
+                    return nil
+                case "2":
+                    selectedItem = .documents
+                    return nil
+                case "3":
+                    selectedItem = .chat
+                    return nil
+                case "4":
+                    selectedItem = .models
+                    return nil
+                case "5":
+                    selectedItem = .settings
+                    return nil
+                case ",":
+                    selectedItem = .settings
+                    return nil
+                default:
+                    break
+                }
+            }
+            return event
+        }
     }
 }
 

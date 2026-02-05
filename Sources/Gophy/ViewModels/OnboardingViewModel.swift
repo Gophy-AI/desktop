@@ -1,0 +1,114 @@
+import Foundation
+import Observation
+import AVFoundation
+import AppKit
+
+@MainActor
+@Observable
+final class OnboardingViewModel {
+    enum OnboardingStep: Int, CaseIterable {
+        case welcome = 0
+        case permissions = 1
+        case models = 2
+        case done = 3
+    }
+
+    var currentStep: OnboardingStep = .welcome
+    var microphonePermissionStatus: AVAuthorizationStatus = .notDetermined
+    var isCheckingPermissions: Bool = false
+
+    private let modelManagerViewModel: ModelManagerViewModel
+
+    init(modelManagerViewModel: ModelManagerViewModel) {
+        self.modelManagerViewModel = modelManagerViewModel
+        checkPermissions()
+    }
+
+    var hasDownloadedModels: Bool {
+        modelManagerViewModel.hasDownloadedModels
+    }
+
+    var totalModelDiskUsage: Double {
+        modelManagerViewModel.totalDiskUsageGB
+    }
+
+    var models: [ModelDefinition] {
+        modelManagerViewModel.models
+    }
+
+    func isDownloaded(_ model: ModelDefinition) -> Bool {
+        modelManagerViewModel.isDownloaded(model)
+    }
+
+    func isDownloading(_ model: ModelDefinition) -> Bool {
+        modelManagerViewModel.isDownloading(model)
+    }
+
+    func downloadProgress(for model: ModelDefinition) -> DownloadProgress? {
+        modelManagerViewModel.downloadProgress[model.id]
+    }
+
+    func downloadModel(_ model: ModelDefinition) {
+        modelManagerViewModel.downloadModel(model)
+    }
+
+    func cancelDownload(_ model: ModelDefinition) {
+        modelManagerViewModel.cancelDownload(model)
+    }
+
+    func checkPermissions() {
+        isCheckingPermissions = true
+        microphonePermissionStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        isCheckingPermissions = false
+    }
+
+    func requestMicrophonePermission() async {
+        isCheckingPermissions = true
+        let granted = await AVCaptureDevice.requestAccess(for: .audio)
+        microphonePermissionStatus = granted ? .authorized : .denied
+        isCheckingPermissions = false
+    }
+
+    func openSystemPreferences() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func nextStep() {
+        if currentStep.rawValue < OnboardingStep.allCases.count - 1 {
+            currentStep = OnboardingStep(rawValue: currentStep.rawValue + 1) ?? .welcome
+        }
+    }
+
+    func previousStep() {
+        if currentStep.rawValue > 0 {
+            currentStep = OnboardingStep(rawValue: currentStep.rawValue - 1) ?? .welcome
+        }
+    }
+
+    func canProceed(from step: OnboardingStep) -> Bool {
+        switch step {
+        case .welcome:
+            return true
+        case .permissions:
+            return microphonePermissionStatus == .authorized
+        case .models:
+            return hasDownloadedModels
+        case .done:
+            return true
+        }
+    }
+
+    func completeOnboarding() {
+        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+    }
+
+    static func hasCompletedOnboarding() -> Bool {
+        UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    }
+
+    static func resetOnboarding() {
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+    }
+}
