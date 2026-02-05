@@ -1,6 +1,12 @@
 import Foundation
 
-public final class ModelRegistry: Sendable {
+public protocol ModelRegistryProtocol: Sendable {
+    func availableModels() -> [ModelDefinition]
+    func isDownloaded(_ model: ModelDefinition) -> Bool
+    func downloadPath(for model: ModelDefinition) -> URL
+}
+
+public final class ModelRegistry: ModelRegistryProtocol, Sendable {
     public static let shared = ModelRegistry()
 
     private let storageManager: StorageManager
