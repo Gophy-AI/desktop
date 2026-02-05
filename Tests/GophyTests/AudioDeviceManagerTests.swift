@@ -76,9 +76,10 @@ final class AudioDeviceManagerTests: XCTestCase {
         let expectation = XCTestExpectation(description: "Receive initial device list notification")
 
         nonisolated(unsafe) var receivedCount = 0
+        let localManager = self.manager!
 
         let task = Task {
-            for await _ in manager.deviceChangeStream {
+            for await _ in localManager.deviceChangeStream {
                 receivedCount += 1
                 if receivedCount == 1 {
                     expectation.fulfill()
@@ -99,9 +100,10 @@ final class AudioDeviceManagerTests: XCTestCase {
 
         nonisolated(unsafe) var receivedNotifications = 0
         let expectation = XCTestExpectation(description: "Receive device change notification")
+        let localManager = self.manager!
 
         let task = Task {
-            for await _ in manager.deviceChangeStream {
+            for await _ in localManager.deviceChangeStream {
                 receivedNotifications += 1
                 if receivedNotifications == 2 {
                     expectation.fulfill()

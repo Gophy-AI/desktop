@@ -36,8 +36,8 @@ struct AudioMixerTests {
         let systemCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
-            microphoneStream: micCapture.start(),
-            systemAudioStream: systemCapture.start()
+            microphoneStream: await micCapture.start(),
+            systemAudioStream: await systemCapture.start()
         )
 
         let outputStream = mixer.start()
@@ -75,8 +75,8 @@ struct AudioMixerTests {
         let systemCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
-            microphoneStream: micCapture.start(),
-            systemAudioStream: systemCapture.start()
+            microphoneStream: await micCapture.start(),
+            systemAudioStream: await systemCapture.start()
         )
 
         let outputStream = mixer.start()
@@ -114,8 +114,8 @@ struct AudioMixerTests {
         let systemCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
-            microphoneStream: micCapture.start(),
-            systemAudioStream: systemCapture.start()
+            microphoneStream: await micCapture.start(),
+            systemAudioStream: await systemCapture.start()
         )
 
         let outputStream = mixer.start()
@@ -166,8 +166,8 @@ struct AudioMixerTests {
         let systemCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
-            microphoneStream: micCapture.start(),
-            systemAudioStream: systemCapture.start()
+            microphoneStream: await micCapture.start(),
+            systemAudioStream: await systemCapture.start()
         )
 
         let outputStream = mixer.start()
@@ -223,8 +223,8 @@ struct AudioMixerTests {
         let systemCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
-            microphoneStream: micCapture.start(),
-            systemAudioStream: systemCapture.start()
+            microphoneStream: await micCapture.start(),
+            systemAudioStream: await systemCapture.start()
         )
 
         let outputStream = mixer.start()
