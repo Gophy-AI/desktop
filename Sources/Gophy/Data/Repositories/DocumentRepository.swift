@@ -57,4 +57,10 @@ public final class DocumentRepository: Sendable {
             )
         }
     }
+
+    public func getChunk(id: String) async throws -> DocumentChunkRecord? {
+        try await database.dbQueue.read { db in
+            try DocumentChunkRecord.fetchOne(db, key: id)
+        }
+    }
 }

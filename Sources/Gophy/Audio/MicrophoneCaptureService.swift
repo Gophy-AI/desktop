@@ -8,8 +8,14 @@ protocol AudioCaptureProtocol: Actor {
     func setInputDevice(deviceID: String) async throws
 }
 
+/// Public protocol for microphone capture to enable DI in MeetingSessionController
+public protocol MicrophoneCaptureProtocol: Sendable {
+    nonisolated func start() -> AsyncStream<AudioChunk>
+    func stop() async
+}
+
 /// Microphone capture service using AVAudioEngine
-actor MicrophoneCaptureService: AudioCaptureProtocol {
+public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCaptureProtocol {
     private let audioEngine = AVAudioEngine()
     private var continuation: AsyncStream<AudioChunk>.Continuation?
     private var audioConverter: AVAudioConverter?
@@ -17,17 +23,21 @@ actor MicrophoneCaptureService: AudioCaptureProtocol {
     private let targetSampleRate: Double = 16000.0
     private let chunkSize = 16000 // 1 second at 16kHz
 
-    init() {}
+    public init() {}
 
     /// Start capturing audio from the microphone
-    func start() -> AsyncStream<AudioChunk> {
-        AsyncStream { continuation in
-            self.continuation = continuation
+    public nonisolated func start() -> AsyncStream<AudioChunk> {
+        AsyncStream { [weak self] continuation in
+            guard let self = self else {
+                continuation.finish()
+                return
+            }
 
             Task {
                 do {
+                    await self.setContinuation(continuation)
                     try await self.setupAudioEngine()
-                    try self.startEngine()
+                    try await self.startEngine()
                 } catch {
                     continuation.finish()
                 }
@@ -35,8 +45,12 @@ actor MicrophoneCaptureService: AudioCaptureProtocol {
         }
     }
 
+    private func setContinuation(_ continuation: AsyncStream<AudioChunk>.Continuation) {
+        self.continuation = continuation
+    }
+
     /// Stop capturing audio
-    func stop() async {
+    public func stop() async {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         continuation?.finish()
@@ -135,7 +149,7 @@ actor MicrophoneCaptureService: AudioCaptureProtocol {
         }
     }
 
-    private func startEngine() throws {
+    private func startEngine() async throws {
         audioEngine.prepare()
         try audioEngine.start()
     }

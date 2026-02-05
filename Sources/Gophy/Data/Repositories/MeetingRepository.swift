@@ -60,6 +60,12 @@ public final class MeetingRepository: Sendable {
         }
     }
 
+    public func getSegment(id: String) async throws -> TranscriptSegmentRecord? {
+        try await database.dbQueue.read { db in
+            try TranscriptSegmentRecord.fetchOne(db, key: id)
+        }
+    }
+
     public func search(query: String) async throws -> [MeetingRecord] {
         try await database.dbQueue.read { db in
             let pattern = "%\(query)%"
@@ -71,6 +77,14 @@ public final class MeetingRepository: Sendable {
                 ORDER BY meetings.startedAt DESC
                 """
             return try MeetingRecord.fetchAll(db, sql: sql, arguments: [pattern])
+        }
+    }
+
+    public func findOrphaned() async throws -> [MeetingRecord] {
+        try await database.dbQueue.read { db in
+            try MeetingRecord
+                .filter(Column("status") == "active" && Column("endedAt") == nil)
+                .fetchAll(db)
         }
     }
 }

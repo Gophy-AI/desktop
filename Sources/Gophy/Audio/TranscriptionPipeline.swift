@@ -59,14 +59,22 @@ public actor TranscriptionPipeline {
     /// Start transcription pipeline
     /// - Parameter mixedStream: Stream of labeled audio chunks from AudioMixer
     /// - Returns: AsyncStream of transcript segments with speaker labels
-    public func start(mixedStream: AsyncStream<LabeledAudioChunk>) -> AsyncStream<TranscriptSegment> {
-        AsyncStream { continuation in
-            self.continuation = continuation
+    public nonisolated func start(mixedStream: AsyncStream<LabeledAudioChunk>) -> AsyncStream<TranscriptSegment> {
+        AsyncStream { [weak self] continuation in
+            guard let self = self else {
+                continuation.finish()
+                return
+            }
 
             Task {
+                await self.setContinuation(continuation)
                 await self.processStream(mixedStream)
             }
         }
+    }
+
+    private func setContinuation(_ continuation: AsyncStream<TranscriptSegment>.Continuation) {
+        self.continuation = continuation
     }
 
     private func processStream(_ stream: AsyncStream<LabeledAudioChunk>) async {
