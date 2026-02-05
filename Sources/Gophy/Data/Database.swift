@@ -10,6 +10,9 @@ public final class GophyDatabase: Sendable {
 
         var configuration = Configuration()
         configuration.prepareDatabase { db in
+            // Set WAL mode before any transactions
+            try db.execute(sql: "PRAGMA journal_mode = WAL")
+
             var errorMessage: UnsafeMutablePointer<CChar>?
             let result = sqlite3_vec_init(db.sqliteConnection, &errorMessage, nil)
 
@@ -23,10 +26,6 @@ public final class GophyDatabase: Sendable {
         }
 
         dbQueue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
-
-        try dbQueue.write { db in
-            try db.execute(sql: "PRAGMA journal_mode = WAL")
-        }
 
         try migrator.migrate(dbQueue)
     }
