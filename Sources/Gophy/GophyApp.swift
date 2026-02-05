@@ -2,9 +2,11 @@ import SwiftUI
 
 @main
 struct GophyApp: App {
+    @State private var selectedItem: SidebarItem? = .meetings
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(selectedItem: $selectedItem)
         }
         .windowStyle(.automatic)
         .commands {
@@ -14,25 +16,54 @@ struct GophyApp: App {
                 }
             }
         }
+
+        MenuBarExtra("Gophy", systemImage: "phone.circle.fill") {
+            Button("Show Gophy") {
+                activateApp()
+            }
+            Divider()
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+        }
+        .menuBarExtraStyle(.menu)
+    }
+
+    private func activateApp() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        for window in NSApplication.shared.windows {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }
 
+@MainActor
 struct ContentView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Gophy")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+    @Binding var selectedItem: SidebarItem?
 
-            Text("AI-powered call assistant")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    var body: some View {
+        NavigationSplitView {
+            SidebarView(selectedItem: $selectedItem)
+        } detail: {
+            if let item = selectedItem {
+                PlaceholderView(item: item)
+            } else {
+                VStack(spacing: 20) {
+                    Text("Gophy")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+
+                    Text("AI-powered call assistant")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
-        .frame(minWidth: 600, minHeight: 400)
-        .padding()
+        .frame(minWidth: 800, minHeight: 600)
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(selectedItem: .constant(.meetings))
 }
