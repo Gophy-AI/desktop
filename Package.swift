@@ -37,6 +37,10 @@ let package = Package(
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "GRDB", package: "GRDB.swift")
+            ],
+            exclude: [
+                "Gophy.entitlements",
+                "Info.plist"
             ]
         ),
         .testTarget(
