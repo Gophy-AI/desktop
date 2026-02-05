@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import QuartzCore
 @testable import Gophy
 
 // Mock TranscriptionEngine for testing
@@ -47,7 +48,7 @@ struct TranscriptionPipelineTests {
             systemAudioStream: AsyncStream { _ in }
         )
 
-        let outputStream = pipeline.start(mixedStream: mixer.start())
+        let outputStream = await pipeline.start(mixedStream: mixer.start())
 
         // Emit speech chunk
         let speechSamples = (0..<16000).map { i in
@@ -106,7 +107,7 @@ struct TranscriptionPipelineTests {
             systemAudioStream: await sysCapture.start()
         )
 
-        let outputStream = pipeline.start(mixedStream: mixer.start())
+        let outputStream = await pipeline.start(mixedStream: mixer.start())
 
         // Emit mic and system chunks
         let speechSamples = (0..<16000).map { i in
@@ -169,7 +170,7 @@ struct TranscriptionPipelineTests {
             systemAudioStream: AsyncStream { _ in }
         )
 
-        let outputStream = pipeline.start(mixedStream: mixer.start())
+        let outputStream = await pipeline.start(mixedStream: mixer.start())
 
         let speechSamples = (0..<16000).map { i in
             Float(0.1 * sin(Double(i) * 2.0 * .pi * 440.0 / 16000.0))
@@ -219,7 +220,7 @@ struct TranscriptionPipelineTests {
             systemAudioStream: AsyncStream { _ in }
         )
 
-        let outputStream = pipeline.start(mixedStream: mixer.start())
+        let outputStream = await pipeline.start(mixedStream: mixer.start())
 
         let speechSamples = (0..<16000).map { i in
             Float(0.1 * sin(Double(i) * 2.0 * .pi * 440.0 / 16000.0))
@@ -263,7 +264,7 @@ struct TranscriptionPipelineTests {
             systemAudioStream: AsyncStream { _ in }
         )
 
-        let outputStream = pipeline.start(mixedStream: mixer.start())
+        let outputStream = await pipeline.start(mixedStream: mixer.start())
 
         let speechSamples = (0..<16000).map { i in
             Float(0.1 * sin(Double(i) * 2.0 * .pi * 440.0 / 16000.0))

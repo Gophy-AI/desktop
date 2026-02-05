@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import QuartzCore
 @testable import Gophy
 
 @Suite("VADFilter Tests")
