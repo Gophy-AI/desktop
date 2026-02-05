@@ -18,9 +18,19 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0")
     ],
     targets: [
+        .target(
+            name: "CSQLiteVec",
+            path: "Sources/CSQLiteVec",
+            publicHeadersPath: "include",
+            cSettings: [
+                .define("SQLITE_CORE"),
+                .define("SQLITE_VEC_STATIC")
+            ]
+        ),
         .executableTarget(
             name: "Gophy",
             dependencies: [
+                "CSQLiteVec",
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXVLM", package: "mlx-swift-lm"),
                 .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
