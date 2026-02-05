@@ -73,16 +73,14 @@ final class AudioDeviceManagerTests: XCTestCase {
     }
 
     func testDeviceChangeStreamDeliversInitialValue() async throws {
-        var receivedDevices: [AudioDevice?] = []
-
         let expectation = XCTestExpectation(description: "Receive initial device list notification")
 
-        Task {
-            var count = 0
-            for await devices in manager.deviceChangeStream {
-                receivedDevices.append(devices.first)
-                count += 1
-                if count == 1 {
+        nonisolated(unsafe) var receivedCount = 0
+
+        let task = Task {
+            for await _ in manager.deviceChangeStream {
+                receivedCount += 1
+                if receivedCount == 1 {
                     expectation.fulfill()
                     break
                 }
@@ -90,7 +88,8 @@ final class AudioDeviceManagerTests: XCTestCase {
         }
 
         await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertEqual(receivedDevices.count, 1)
+        task.cancel()
+        XCTAssertEqual(receivedCount, 1)
     }
 
     func testDeviceChangeStreamDeliversUpdateWhenDeviceChanges() async throws {
@@ -98,10 +97,10 @@ final class AudioDeviceManagerTests: XCTestCase {
             throw XCTSkip("No audio hardware available for device change testing")
         }
 
-        var receivedNotifications = 0
+        nonisolated(unsafe) var receivedNotifications = 0
         let expectation = XCTestExpectation(description: "Receive device change notification")
 
-        Task {
+        let task = Task {
             for await _ in manager.deviceChangeStream {
                 receivedNotifications += 1
                 if receivedNotifications == 2 {
@@ -116,6 +115,7 @@ final class AudioDeviceManagerTests: XCTestCase {
         manager.triggerDeviceListRefresh()
 
         await fulfillment(of: [expectation], timeout: 2.0)
+        task.cancel()
         XCTAssertGreaterThanOrEqual(receivedNotifications, 2)
     }
 
