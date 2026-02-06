@@ -24,5 +24,7 @@
     <string>NSApplication</string>
     <key>CFBundleExecutable</key>
     <string>Gophy</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>
