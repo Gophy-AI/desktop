@@ -2,18 +2,29 @@ import Foundation
 
 public final class ModelDownloadManager: @unchecked Sendable {
     private let registry: ModelRegistry
-    private let downloader: ModelDownloaderProtocol
+    private let huggingFaceDownloader: ModelDownloaderProtocol
+    private let whisperKitDownloader: ModelDownloaderProtocol
     private let downloadTasks: NSLock
     private var activeDownloads: [String: Task<Void, Never>]
 
     public init(
         registry: ModelRegistry = .shared,
-        downloader: ModelDownloaderProtocol? = nil
+        downloader: ModelDownloaderProtocol? = nil,
+        whisperKitDownloader: ModelDownloaderProtocol? = nil
     ) {
         self.registry = registry
-        self.downloader = downloader ?? HuggingFaceDownloader()
+        self.huggingFaceDownloader = downloader ?? HuggingFaceDownloader()
+        self.whisperKitDownloader = whisperKitDownloader ?? WhisperKitDownloader()
         self.downloadTasks = NSLock()
         self.activeDownloads = [:]
+    }
+
+    private func downloader(for model: ModelDefinition) -> ModelDownloaderProtocol {
+        // Use WhisperKitDownloader for STT models, HuggingFaceDownloader for others
+        if model.type == .stt {
+            return whisperKitDownloader
+        }
+        return huggingFaceDownloader
     }
 
     public func download(_ model: ModelDefinition) -> AsyncStream<DownloadProgress> {
@@ -36,7 +47,7 @@ public final class ModelDownloadManager: @unchecked Sendable {
                 do {
                     try self.ensureSufficientDiskSpace(for: model)
 
-                    let downloadStream = self.downloader.download(model: model, to: destination)
+                    let downloadStream = self.downloader(for: model).download(model: model, to: destination)
 
                     for await progress in downloadStream {
                         continuation.yield(progress)
@@ -75,7 +86,7 @@ public final class ModelDownloadManager: @unchecked Sendable {
             activeDownloads.removeValue(forKey: model.id)
         }
 
-        downloader.cancel()
+        downloader(for: model).cancel()
     }
 
     public func isDownloading(_ model: ModelDefinition) -> Bool {
