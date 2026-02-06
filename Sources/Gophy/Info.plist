@@ -18,6 +18,10 @@
     <string>14.4</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Gophy records your voice during meetings to provide real-time transcription and contextual AI suggestions.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     <key>CFBundleExecutable</key>
     <string>Gophy</string>
 </dict>
