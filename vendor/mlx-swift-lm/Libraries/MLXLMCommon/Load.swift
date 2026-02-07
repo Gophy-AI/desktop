@@ -5,6 +5,9 @@ import Hub
 import MLX
 import MLXNN
 import Tokenizers
+import os
+
+private let loadLogger = Logger(subsystem: "com.gophy.app", category: "MLXLoad")
 
 /// Download the model using the `HubApi`.
 ///
@@ -66,21 +69,33 @@ public func loadWeights(
     quantization: BaseConfiguration.Quantization? = nil,
     perLayerQuantization: BaseConfiguration.PerLayerQuantization? = nil
 ) throws {
+    loadLogger.info("loadWeights from \(modelDirectory.path, privacy: .public)")
+
     // load the weights
     var weights = [String: MLXArray]()
     let enumerator = FileManager.default.enumerator(
         at: modelDirectory, includingPropertiesForKeys: nil)!
+    var safetensorsCount = 0
     for case let url as URL in enumerator {
         if url.pathExtension == "safetensors" {
+            safetensorsCount += 1
+            loadLogger.info("Loading safetensors: \(url.lastPathComponent, privacy: .public)")
             let w = try loadArrays(url: url)
+            loadLogger.info("  loaded \(w.count, privacy: .public) arrays")
             for (key, value) in w {
                 weights[key] = value
             }
         }
     }
+    loadLogger.info("Total: \(safetensorsCount, privacy: .public) safetensors files, \(weights.count, privacy: .public) weight keys")
+
+    if weights.isEmpty {
+        loadLogger.error("NO WEIGHTS LOADED - model directory may be missing safetensors files")
+    }
 
     // per-model cleanup
     weights = model.sanitize(weights: weights)
+    loadLogger.info("After sanitize: \(weights.count, privacy: .public) weight keys")
 
     // quantize if needed
     if quantization != nil || perLayerQuantization != nil {
@@ -98,8 +113,11 @@ public func loadWeights(
     }
 
     // apply the loaded weights
+    loadLogger.info("Applying weights to model...")
     let parameters = ModuleParameters.unflattened(weights)
     try model.update(parameters: parameters, verify: [.all])
+    loadLogger.info("Weights applied successfully")
 
     eval(model)
+    loadLogger.info("Model evaluated")
 }

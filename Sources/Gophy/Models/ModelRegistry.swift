@@ -84,19 +84,21 @@ public final class ModelRegistry: ModelRegistryProtocol, Sendable {
 
     private func isModelAt(_ path: URL) -> Bool {
         let fileManager = FileManager.default
-        let exists = fileManager.fileExists(atPath: path.path)
-        guard exists else {
+        guard fileManager.fileExists(atPath: path.path) else {
             registryLogger.debug("isModelAt: directory does not exist: \(path.path)")
             return false
         }
         do {
             let contents = try fileManager.contentsOfDirectory(
                 at: path,
-                includingPropertiesForKeys: [.isRegularFileKey],
+                includingPropertiesForKeys: nil,
                 options: .skipsHiddenFiles
             )
-            registryLogger.debug("isModelAt: \(path.path) has \(contents.count) files")
-            return !contents.isEmpty
+            let hasWeights = contents.contains { url in
+                url.pathExtension == "safetensors" || url.pathExtension == "mlmodelc"
+            }
+            registryLogger.debug("isModelAt: \(path.path) has \(contents.count) files, hasWeights=\(hasWeights)")
+            return hasWeights
         } catch {
             registryLogger.error("isModelAt: failed to list directory \(path.path): \(error)")
             return false

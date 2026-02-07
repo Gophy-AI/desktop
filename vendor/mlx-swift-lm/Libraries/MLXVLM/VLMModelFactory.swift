@@ -5,6 +5,9 @@ import Hub
 import MLX
 import MLXLMCommon
 import Tokenizers
+import os
+
+private let vlmLogger = Logger(subsystem: "com.gophy.app", category: "VLMModelFactory")
 
 public enum VLMError: LocalizedError, Equatable {
     case imageRequired
@@ -272,9 +275,20 @@ public final class VLMModelFactory: ModelFactory {
         hub: HubApi, configuration: ModelConfiguration,
         progressHandler: @Sendable @escaping (Progress) -> Void
     ) async throws -> sending ModelContext {
+        vlmLogger.info("VLMModelFactory._load started, config=\(configuration.name, privacy: .public)")
+
         // download weights and config
         let modelDirectory = try await downloadModel(
             hub: hub, configuration: configuration, progressHandler: progressHandler)
+        vlmLogger.info("Model directory: \(modelDirectory.path, privacy: .public)")
+
+        // List directory contents for debugging
+        if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelDirectory.path) {
+            let safetensorsFiles = contents.filter { $0.hasSuffix(".safetensors") }
+            vlmLogger.info("Directory has \(contents.count, privacy: .public) files, \(safetensorsFiles.count, privacy: .public) safetensors: \(safetensorsFiles.joined(separator: ", "), privacy: .public)")
+        } else {
+            vlmLogger.error("Failed to list model directory contents")
+        }
 
         // Load config.json once and decode for both base config and model-specific config
         let configurationURL = modelDirectory.appending(component: "config.json")
@@ -293,11 +307,15 @@ public final class VLMModelFactory: ModelFactory {
                 configurationURL.lastPathComponent, configuration.name, error)
         }
 
+        vlmLogger.info("modelType=\(baseConfig.modelType, privacy: .public)")
+
         let model: LanguageModel
         do {
             model = try await typeRegistry.createModel(
                 configuration: configData, modelType: baseConfig.modelType)
+            vlmLogger.info("Model created successfully for type \(baseConfig.modelType, privacy: .public)")
         } catch let error as DecodingError {
+            vlmLogger.error("Model config decoding error: \(error, privacy: .public)")
             throw ModelFactoryError.configurationDecodingError(
                 configurationURL.lastPathComponent, configuration.name, error)
         }
@@ -324,11 +342,14 @@ public final class VLMModelFactory: ModelFactory {
         async let tokenizerTask = loadTokenizer(configuration: configuration, hub: hub)
         async let processorConfigTask = loadProcessorConfig(from: modelDirectory)
 
+        vlmLogger.info("Loading weights...")
         try loadWeights(
             modelDirectory: modelDirectory, model: model,
             perLayerQuantization: baseConfig.perLayerQuantization)
+        vlmLogger.info("Weights loaded successfully")
 
         let tokenizer = try await tokenizerTask
+        vlmLogger.info("Tokenizer loaded")
         let processorConfigData: Data
         let baseProcessorConfig: BaseProcessorConfiguration
         do {
@@ -355,6 +376,7 @@ public final class VLMModelFactory: ModelFactory {
             configuration: processorConfigData,
             processorType: processorType, tokenizer: tokenizer)
 
+        vlmLogger.info("VLMModelFactory._load completed successfully")
         return .init(
             configuration: mutableConfiguration, model: model, processor: processor,
             tokenizer: tokenizer)

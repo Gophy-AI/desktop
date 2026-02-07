@@ -1,14 +1,22 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os
+
+private let docViewLogger = Logger(subsystem: "com.gophy.app", category: "DocumentManagerView")
 
 @MainActor
 struct DocumentManagerView: View {
     @State private var viewModel: DocumentManagerViewModel?
     @State private var selectedDocument: DocumentRecord?
+    @State private var initError: String?
+    @State private var isDragOver = false
+    @State private var chatDocumentContext: ChatContext?
 
     var body: some View {
         Group {
-            if let viewModel = viewModel {
+            if let errorMessage = initError {
+                modelsRequiredView(message: errorMessage)
+            } else if let viewModel = viewModel {
                 NavigationStack {
                     if selectedDocument == nil {
                         documentListView(viewModel: viewModel)
@@ -36,6 +44,30 @@ struct DocumentManagerView: View {
         .task {
             await initializeViewModel()
         }
+    }
+
+    private func modelsRequiredView(message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "cpu")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+
+            Text("Models Required")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Text("Go to Models tab to download the required models.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func documentListView(viewModel: DocumentManagerViewModel) -> some View {
@@ -90,9 +122,28 @@ struct DocumentManagerView: View {
                         DocumentRowView(
                             document: document,
                             viewModel: viewModel,
-                            onSelect: { selectedDocument = document }
+                            onSelect: { selectedDocument = document },
+                            onOpenChat: {
+                                chatDocumentContext = ChatContext(id: document.id, title: document.name)
+                            },
+                            onDelete: {
+                                Task { await viewModel.deleteDocument(document) }
+                            }
                         )
                         .contextMenu {
+                            Button {
+                                chatDocumentContext = ChatContext(id: document.id, title: document.name)
+                            } label: {
+                                Label("Open Chat", systemImage: "bubble.left")
+                            }
+                            if document.meetingId != nil {
+                                Button {
+                                    Task { await viewModel.unlinkDocument(document) }
+                                } label: {
+                                    Label("Unlink from Meeting", systemImage: "link.badge.plus")
+                                }
+                            }
+                            Divider()
                             Button(role: .destructive) {
                                 Task {
                                     await viewModel.deleteDocument(document)
@@ -108,9 +159,45 @@ struct DocumentManagerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+        .overlay {
+            if isDragOver {
+                dropZoneOverlay
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers: providers, viewModel: viewModel)
         }
+        .sheet(item: $chatDocumentContext) { context in
+            ChatView(documentId: context.id, documentName: context.title)
+                .frame(minWidth: 600, minHeight: 500)
+        }
+    }
+
+    private var dropZoneOverlay: some View {
+        ZStack {
+            Color.blue.opacity(0.1)
+
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(style: StrokeStyle(lineWidth: 3, dash: [10]))
+                .foregroundStyle(.blue)
+                .padding(20)
+
+            VStack(spacing: 12) {
+                Image(systemName: "arrow.down.doc.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+
+                Text("Drop files to add")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.blue)
+
+                Text("PDF, PNG, JPG, TXT, MD")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var emptyStateView: some View {
@@ -127,6 +214,15 @@ struct DocumentManagerView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.doc")
+                    .foregroundStyle(.blue)
+                Text("Drag and drop files here")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -159,7 +255,7 @@ struct DocumentManagerView: View {
     }
 
     private func initializeViewModel() async {
-        guard viewModel == nil else { return }
+        guard viewModel == nil, initError == nil else { return }
 
         do {
             let storageManager = StorageManager()
@@ -167,24 +263,40 @@ struct DocumentManagerView: View {
             let documentRepo = DocumentRepository(database: database)
             let meetingRepo = MeetingRepository(database: database)
 
-            guard (ModelRegistry.shared.availableModels().first(where: { $0.type == .embedding })) != nil else {
-                return
-            }
-
-            guard (ModelRegistry.shared.availableModels().first(where: { $0.type == .ocr })) != nil else {
-                return
-            }
-
-            let embeddingEngine = EmbeddingEngine()
+            // OCR engine: load first since it is essential for document processing
             let ocrEngine = OCREngine()
-
-            if !embeddingEngine.isLoaded {
-                try await embeddingEngine.load()
+            let allOCRModels = ModelRegistry.shared.availableModels().filter { $0.type == .ocr }
+            docViewLogger.info("OCR models available: \(allOCRModels.map { $0.id }.joined(separator: ", "), privacy: .public)")
+            if let ocrModel = allOCRModels.first {
+                let downloaded = ModelRegistry.shared.isDownloaded(ocrModel)
+                let path = ModelRegistry.shared.downloadPath(for: ocrModel)
+                docViewLogger.info("OCR model '\(ocrModel.id, privacy: .public)' isDownloaded=\(downloaded, privacy: .public) path=\(path.path, privacy: .public)")
+                if downloaded {
+                    let ocrEngineLoaded = await ocrEngine.isLoaded
+                    docViewLogger.info("OCR engine isLoaded=\(ocrEngineLoaded, privacy: .public)")
+                    if !ocrEngineLoaded {
+                        docViewLogger.info("Calling ocrEngine.load()...")
+                        try await ocrEngine.load()
+                        docViewLogger.info("ocrEngine.load() completed successfully")
+                    }
+                } else {
+                    docViewLogger.warning("OCR model NOT downloaded, skipping load. Check model directory at \(path.path, privacy: .public)")
+                }
+            } else {
+                docViewLogger.warning("No OCR models found in registry")
             }
 
-            let ocrEngineLoaded = await ocrEngine.isLoaded
-            if !ocrEngineLoaded {
-                try await ocrEngine.load()
+            // Embedding engine: load separately, non-fatal if it fails
+            let embeddingEngine = EmbeddingEngine()
+            if ModelRegistry.shared.availableModels().first(where: { $0.type == .embedding }) != nil {
+                if !embeddingEngine.isLoaded {
+                    do {
+                        try await embeddingEngine.load()
+                    } catch {
+                        // Embedding is optional for document processing
+                        // Documents can still be processed with OCR without vector search
+                    }
+                }
             }
 
             let vectorSearchService = VectorSearchService(database: database)
@@ -206,7 +318,7 @@ struct DocumentManagerView: View {
                 documentProcessor: documentProcessor
             )
         } catch {
-            print("Failed to initialize DocumentManagerView: \(error)")
+            initError = "Failed to initialize: \(error.localizedDescription)"
         }
     }
 }
@@ -216,6 +328,8 @@ struct DocumentRowView: View {
     let document: DocumentRecord
     let viewModel: DocumentManagerViewModel
     let onSelect: () -> Void
+    var onOpenChat: (() -> Void)?
+    var onDelete: (() -> Void)?
 
     var body: some View {
         Button(action: onSelect) {
@@ -248,6 +362,28 @@ struct DocumentRowView: View {
                 if document.status == "processing" {
                     SwiftUI.ProgressView()
                         .scaleEffect(0.7)
+                } else {
+                    HStack(spacing: 8) {
+                        if let onOpenChat {
+                            Button(action: onOpenChat) {
+                                Image(systemName: "bubble.left")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open Chat")
+                        }
+
+                        if let onDelete {
+                            Button(action: onDelete) {
+                                Image(systemName: "trash")
+                                    .font(.caption)
+                                    .foregroundStyle(.red.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Delete")
+                        }
+                    }
                 }
             }
             .padding(.vertical, 8)

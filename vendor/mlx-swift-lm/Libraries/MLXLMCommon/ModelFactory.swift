@@ -293,17 +293,32 @@ public func loadModelContainer(
 
 private func load<R>(loader: (ModelFactory) async throws -> sending R) async throws -> sending R {
     let factories = ModelFactoryRegistry.shared.modelFactories()
+    var firstMeaningfulError: Error?
     var lastError: Error?
     for factory in factories {
         do {
             let model = try await loader(factory)
             return model
+        } catch let error as ModelFactoryError {
+            if case .unsupportedModelType = error {
+                lastError = error
+            } else {
+                if firstMeaningfulError == nil {
+                    firstMeaningfulError = error
+                }
+                lastError = error
+            }
         } catch {
+            if firstMeaningfulError == nil {
+                firstMeaningfulError = error
+            }
             lastError = error
         }
     }
 
-    if let lastError {
+    if let firstMeaningfulError {
+        throw firstMeaningfulError
+    } else if let lastError {
         throw lastError
     } else {
         throw ModelFactoryError.noModelFactoryAvailable

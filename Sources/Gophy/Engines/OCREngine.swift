@@ -43,8 +43,9 @@ public actor OCREngine: OCREngineProtocol {
     }
 
     public func load() async throws {
-        guard currentState.isUnloaded else {
-            ocrLogger.debug("load() called but state is not unloaded, skipping")
+        ocrLogger.info("load() called, currentState=\(self.currentState.debugLabel, privacy: .public)")
+        guard currentState.isUnloaded || currentState.isError else {
+            ocrLogger.debug("load() called but state is not unloaded/error, skipping")
             return
         }
 
@@ -81,7 +82,7 @@ public actor OCREngine: OCREngineProtocol {
             let configuration = ModelConfiguration(directory: downloadPath)
             ocrLogger.info("Loading model container from \(downloadPath.path)")
 
-            modelContainer = try await loadModelContainer(configuration: configuration)
+            modelContainer = try await VLMModelFactory.shared.loadContainer(configuration: configuration)
             currentState = .ready
             ocrLogger.info("OCR engine loaded successfully")
         } catch {
@@ -101,10 +102,10 @@ public actor OCREngine: OCREngineProtocol {
     }
 
     private func performExtraction(with image: CIImage) async throws -> String {
-        ocrLogger.info("performExtraction called, state=\(String(describing: self.currentState))")
+        ocrLogger.info("performExtraction called, state=\(self.currentState.debugLabel, privacy: .public)")
 
         guard currentState.isReady else {
-            ocrLogger.error("performExtraction: engine not ready, state=\(String(describing: self.currentState))")
+            ocrLogger.error("performExtraction: engine not ready, state=\(self.currentState.debugLabel, privacy: .public)")
             throw OCRError.modelNotLoaded
         }
 
@@ -169,6 +170,16 @@ public enum OCRError: Error, Sendable {
 }
 
 extension OCREngine.State {
+    var debugLabel: String {
+        switch self {
+        case .unloaded: return "unloaded"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .processing: return "processing"
+        case .error(let error): return "error(\(error))"
+        }
+    }
+
     fileprivate var isReady: Bool {
         if case .ready = self {
             return true
@@ -178,6 +189,13 @@ extension OCREngine.State {
 
     fileprivate var isUnloaded: Bool {
         if case .unloaded = self {
+            return true
+        }
+        return false
+    }
+
+    fileprivate var isError: Bool {
+        if case .error = self {
             return true
         }
         return false
