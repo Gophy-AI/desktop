@@ -147,6 +147,38 @@ public final class AnthropicProvider: TextGenerationProvider, VisionProvider, @u
     }
 }
 
+// MARK: - HealthCheckable
+
+extension AnthropicProvider: HealthCheckable {
+    public func healthCheck() async -> ProviderHealthStatus {
+        do {
+            let result = try await session.createMessage(
+                model: textGenModel,
+                messages: [(role: "user", content: "ping", imageBase64: nil)],
+                systemPrompt: nil,
+                maxTokens: 1,
+                temperature: 0
+            )
+            _ = result
+            return .healthy
+        } catch {
+            let mapped = Self.mapError(error)
+            switch mapped {
+            case .invalidAPIKey:
+                return .unavailable("Invalid API key")
+            case .rateLimited:
+                return .degraded("Rate limited")
+            case .serverError(let code, let msg):
+                return .unavailable("Server error \(code): \(msg)")
+            case .networkError(let msg):
+                return .unavailable("Network error: \(msg)")
+            default:
+                return .unavailable(error.localizedDescription)
+            }
+        }
+    }
+}
+
 // MARK: - Live Anthropic Session
 
 final class AnthropicLiveSession: AnthropicSessionProtocol, @unchecked Sendable {

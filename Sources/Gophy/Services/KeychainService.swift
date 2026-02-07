@@ -1,7 +1,14 @@
 import Foundation
 import Security
 
-public final class KeychainService: Sendable {
+public protocol KeychainServiceProtocol: Sendable {
+    func save(apiKey: String, for providerId: String) throws
+    func retrieve(for providerId: String) throws -> String?
+    func delete(for providerId: String) throws
+    func listProviderIds() throws -> [String]
+}
+
+public final class KeychainService: KeychainServiceProtocol, Sendable {
     private let serviceName: String
 
     public init(serviceName: String = "com.gophy.api-keys") {

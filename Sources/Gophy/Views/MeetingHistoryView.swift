@@ -5,6 +5,7 @@ struct MeetingHistoryView: View {
     @State private var viewModel: MeetingHistoryViewModel
     @State private var selectedMeeting: MeetingRecord?
     @State private var showDetail = false
+    @State private var showNewMeeting = false
     private let meetingRepository: MeetingRepository
     private let chatMessageRepository: ChatMessageRepository
 
@@ -26,6 +27,13 @@ struct MeetingHistoryView: View {
                     .fontWeight(.bold)
 
                 Spacer()
+
+                Button(action: {
+                    showNewMeeting = true
+                }) {
+                    Label("Start Meeting", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
             }
             .padding()
 
@@ -118,6 +126,14 @@ struct MeetingHistoryView: View {
                 )
             }
         }
+        .sheet(isPresented: $showNewMeeting) {
+            MeetingContainerView {
+                showNewMeeting = false
+                Task {
+                    await viewModel.loadMeetings()
+                }
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -133,9 +149,18 @@ struct MeetingHistoryView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.primary)
 
-            Text("Start a meeting to begin")
+            Text("Start a meeting to begin recording and transcribing")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            Button(action: {
+                showNewMeeting = true
+            }) {
+                Label("Start Meeting", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.top, 8)
 
             Spacer()
         }
@@ -181,10 +206,18 @@ struct MeetingListRowView: View {
         Button(action: onSelect) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(meeting.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(meeting.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        if meeting.mode == "playback" {
+                            Image(systemName: "waveform")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
 
                     HStack(spacing: 12) {
                         Label(formatDate(), systemImage: "calendar")
@@ -194,6 +227,12 @@ struct MeetingListRowView: View {
                         Label(formatDuration(), systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        if meeting.mode == "playback", let count = meeting.speakerCount {
+                            Label("\(count) speakers", systemImage: "person.2")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
                         if meeting.status != "completed" {
                             Label(meeting.status.capitalized, systemImage: "circle.fill")

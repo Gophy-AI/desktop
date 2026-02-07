@@ -87,6 +87,8 @@ private actor MockMeetingRepoForBuiltIn: MeetingRepositoryProtocol {
     func addTranscriptSegment(_ segment: TranscriptSegmentRecord) async throws {}
     func search(query: String) async throws -> [MeetingRecord] { [] }
     func findOrphaned() async throws -> [MeetingRecord] { [] }
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] { [] }
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {}
 
     func getTranscript(meetingId: String) async throws -> [TranscriptSegmentRecord] {
         transcripts[meetingId] ?? []

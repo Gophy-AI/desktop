@@ -87,4 +87,21 @@ public final class MeetingRepository: Sendable {
                 .fetchAll(db)
         }
     }
+
+    // MARK: - Speaker Labels
+
+    public func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] {
+        try await database.dbQueue.read { db in
+            try SpeakerLabelRecord
+                .filter(Column("meetingId") == meetingId)
+                .order(Column("originalLabel").asc)
+                .fetchAll(db)
+        }
+    }
+
+    public func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {
+        try await database.dbQueue.write { db in
+            try label.save(db)
+        }
+    }
 }

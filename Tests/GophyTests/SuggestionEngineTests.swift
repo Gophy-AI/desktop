@@ -361,6 +361,14 @@ actor MockMeetingRepoForSuggestion: MeetingRepositoryProtocol {
         []
     }
 
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] {
+        []
+    }
+
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {
+        // No-op
+    }
+
     func setTranscript(for meetingId: String, segments: [TranscriptSegmentRecord]) {
         transcripts[meetingId] = segments
     }

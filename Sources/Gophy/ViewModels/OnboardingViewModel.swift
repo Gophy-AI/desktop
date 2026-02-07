@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import AVFoundation
 import AppKit
+import EventKit
 
 @MainActor
 @Observable
@@ -10,20 +11,27 @@ final class OnboardingViewModel {
         case welcome = 0
         case permissions = 1
         case language = 2
-        case models = 3
-        case done = 4
+        case calendar = 3
+        case models = 4
+        case cloudProviders = 5
+        case done = 6
     }
 
     var currentStep: OnboardingStep = .welcome
     var microphonePermissionStatus: AVAuthorizationStatus = .notDetermined
     var isCheckingPermissions: Bool = false
     var languagePreference: AppLanguage = .auto
+    var calendarConnected: Bool = false
+    var isConnectingCalendar: Bool = false
+    var calendarSkipped: Bool = false
+    var eventKitGranted: Bool = false
 
     private let modelManagerViewModel: ModelManagerViewModel
 
     init(modelManagerViewModel: ModelManagerViewModel) {
         self.modelManagerViewModel = modelManagerViewModel
         checkPermissions()
+        checkEventKitStatus()
     }
 
     var hasDownloadedModels: Bool {
@@ -102,8 +110,12 @@ final class OnboardingViewModel {
             return microphonePermissionStatus == .authorized
         case .language:
             return true
+        case .calendar:
+            return true
         case .models:
             return hasDownloadedModels
+        case .cloudProviders:
+            return true
         case .done:
             return true
         }
@@ -119,5 +131,24 @@ final class OnboardingViewModel {
 
     static func resetOnboarding() {
         UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+    }
+
+    private func checkEventKitStatus() {
+        let status = EKEventStore.authorizationStatus(for: .event)
+        eventKitGranted = (status == .authorized || status == .fullAccess)
+    }
+
+    func requestEventKitAccess() async {
+        let store = EKEventStore()
+        do {
+            let granted = try await store.requestFullAccessToEvents()
+            eventKitGranted = granted
+        } catch {
+            eventKitGranted = false
+        }
+    }
+
+    func skipCalendarSetup() {
+        calendarSkipped = true
     }
 }

@@ -224,6 +224,48 @@ public final class OpenAICompatibleProvider: TextGenerationProvider, EmbeddingPr
     }
 }
 
+// MARK: - HealthCheckable
+
+extension OpenAICompatibleProvider: HealthCheckable {
+    public func healthCheck() async -> ProviderHealthStatus {
+        guard let model = textGenModel ?? embeddingModel ?? sttModel ?? visionModel else {
+            return .unavailable("No model configured")
+        }
+
+        do {
+            if textGenModel != nil {
+                let result = try await session.chat(
+                    model: model,
+                    messages: [(role: "user", content: "ping", imageBase64: nil)],
+                    maxTokens: 1,
+                    temperature: 0
+                )
+                _ = result
+                return .healthy
+            } else if embeddingModel != nil {
+                _ = try await session.embeddings(model: model, input: ["test"])
+                return .healthy
+            } else {
+                return .healthy
+            }
+        } catch {
+            let mapped = Self.mapError(error)
+            switch mapped {
+            case .invalidAPIKey:
+                return .unavailable("Invalid API key")
+            case .rateLimited:
+                return .degraded("Rate limited")
+            case .serverError(let code, let msg):
+                return .unavailable("Server error \(code): \(msg)")
+            case .networkError(let msg):
+                return .unavailable("Network error: \(msg)")
+            default:
+                return .unavailable(error.localizedDescription)
+            }
+        }
+    }
+}
+
 // MARK: - Live OpenAI Session
 
 final class OpenAILiveSession: OpenAISessionProtocol, @unchecked Sendable {

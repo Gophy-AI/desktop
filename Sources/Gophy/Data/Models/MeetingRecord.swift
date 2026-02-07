@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public struct MeetingRecord: Codable, Sendable {
+public struct MeetingRecord: Codable, Sendable, Identifiable {
     public let id: String
     public let title: String
     public let startedAt: Date
@@ -9,6 +9,10 @@ public struct MeetingRecord: Codable, Sendable {
     public let mode: String
     public let status: String
     public let createdAt: Date
+    public let sourceFilePath: String?
+    public let speakerCount: Int?
+    public let calendarEventId: String?
+    public let calendarTitle: String?
 
     public init(
         id: String,
@@ -17,7 +21,11 @@ public struct MeetingRecord: Codable, Sendable {
         endedAt: Date?,
         mode: String,
         status: String,
-        createdAt: Date
+        createdAt: Date,
+        sourceFilePath: String? = nil,
+        speakerCount: Int? = nil,
+        calendarEventId: String? = nil,
+        calendarTitle: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -26,6 +34,10 @@ public struct MeetingRecord: Codable, Sendable {
         self.mode = mode
         self.status = status
         self.createdAt = createdAt
+        self.sourceFilePath = sourceFilePath
+        self.speakerCount = speakerCount
+        self.calendarEventId = calendarEventId
+        self.calendarTitle = calendarTitle
     }
 }
 

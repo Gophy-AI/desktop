@@ -13,12 +13,13 @@ extension TranscriptionEngine: PipelineTranscriptionProtocol {}
 
 /// Real-time streaming transcription pipeline
 ///
-/// Connects AudioMixer → VADFilter → TranscriptionEngine
+/// Connects AudioMixer -> VADFilter -> TranscriptionEngine (or STTProvider)
 /// Accumulates 2-5 seconds of audio per channel in sliding window
 /// Runs mic and system audio transcription concurrently
 /// Target latency: audio chunk to text under 2 seconds
 public actor TranscriptionPipeline {
     private let transcriptionEngine: any PipelineTranscriptionProtocol
+    private let sttProvider: (any STTProvider)?
     private let vadFilter: VADFilter
     private let languageDetector: LanguageDetector
     private var continuation: AsyncStream<TranscriptSegment>.Continuation?
@@ -56,8 +57,18 @@ public actor TranscriptionPipeline {
         }
     }
 
+    /// Initialize with a PipelineTranscriptionProtocol (local engine)
     public init(transcriptionEngine: any PipelineTranscriptionProtocol, vadFilter: VADFilter = VADFilter(), languageDetector: LanguageDetector = LanguageDetector()) {
         self.transcriptionEngine = transcriptionEngine
+        self.sttProvider = nil
+        self.vadFilter = vadFilter
+        self.languageDetector = languageDetector
+    }
+
+    /// Initialize with an STTProvider (cloud or local provider)
+    public init(sttProvider: any STTProvider, transcriptionEngine: any PipelineTranscriptionProtocol, vadFilter: VADFilter = VADFilter(), languageDetector: LanguageDetector = LanguageDetector()) {
+        self.transcriptionEngine = transcriptionEngine
+        self.sttProvider = sttProvider
         self.vadFilter = vadFilter
         self.languageDetector = languageDetector
     }
@@ -165,10 +176,17 @@ public actor TranscriptionPipeline {
         buffer.clear()
         buffers[speaker] = buffer
 
-        // Transcribe asynchronously
+        // Transcribe asynchronously via STTProvider or local engine
         do {
-            pipelineLogger.info("Calling transcriptionEngine.transcribe...")
-            let segments = try await transcriptionEngine.transcribe(audioArray: audioArray, sampleRate: 16000, language: languageHint)
+            let segments: [TranscriptionSegment]
+            if let provider = sttProvider {
+                pipelineLogger.info("Calling STTProvider.transcribe...")
+                let wavData = convertFloat32ToWAVData(samples: audioArray, sampleRate: 16000)
+                segments = try await provider.transcribe(audioData: wavData, format: .wav)
+            } else {
+                pipelineLogger.info("Calling transcriptionEngine.transcribe...")
+                segments = try await transcriptionEngine.transcribe(audioArray: audioArray, sampleRate: 16000, language: languageHint)
+            }
             pipelineLogger.info("Transcription returned \(segments.count, privacy: .public) segments")
 
             // Convert to transcript segments with speaker labels and language detection
@@ -206,5 +224,45 @@ public actor TranscriptionPipeline {
         await flushAllBuffers()
         continuation?.finish()
         continuation = nil
+    }
+
+    /// Convert Float32 audio samples to WAV format Data for cloud STT
+    private func convertFloat32ToWAVData(samples: [Float], sampleRate: Int) -> Data {
+        let numChannels: UInt16 = 1
+        let bitsPerSample: UInt16 = 16
+        let byteRate = UInt32(sampleRate) * UInt32(numChannels) * UInt32(bitsPerSample / 8)
+        let blockAlign = numChannels * (bitsPerSample / 8)
+        let dataSize = UInt32(samples.count * 2)
+        let fileSize = 36 + dataSize
+
+        var data = Data()
+
+        // RIFF header
+        data.append(contentsOf: [0x52, 0x49, 0x46, 0x46]) // "RIFF"
+        data.append(contentsOf: withUnsafeBytes(of: fileSize.littleEndian) { Array($0) })
+        data.append(contentsOf: [0x57, 0x41, 0x56, 0x45]) // "WAVE"
+
+        // fmt subchunk
+        data.append(contentsOf: [0x66, 0x6D, 0x74, 0x20]) // "fmt "
+        data.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) }) // PCM
+        data.append(contentsOf: withUnsafeBytes(of: numChannels.littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: UInt32(sampleRate).littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: byteRate.littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: blockAlign.littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: bitsPerSample.littleEndian) { Array($0) })
+
+        // data subchunk
+        data.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
+        data.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
+
+        // Convert float32 to int16
+        for sample in samples {
+            let clamped = max(-1.0, min(1.0, sample))
+            let int16Value = Int16(clamped * Float(Int16.max))
+            data.append(contentsOf: withUnsafeBytes(of: int16Value.littleEndian) { Array($0) })
+        }
+
+        return data
     }
 }

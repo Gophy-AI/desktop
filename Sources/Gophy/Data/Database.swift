@@ -170,6 +170,52 @@ public final class GophyDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v12_recording_metadata") { db in
+            // Add recording-specific columns to meetings table
+            try db.alter(table: "meetings") { t in
+                t.add(column: "sourceFilePath", .text)
+                t.add(column: "speakerCount", .integer)
+            }
+
+            // Create speaker_labels table for diarized speaker names and colors
+            try db.create(table: "speaker_labels") { t in
+                t.column("id", .text).primaryKey()
+                t.column("meetingId", .text).notNull()
+                    .references("meetings", onDelete: .cascade)
+                t.column("originalLabel", .text).notNull()
+                t.column("customLabel", .text)
+                t.column("color", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_speaker_labels_meetingId", on: "speaker_labels", columns: ["meetingId"])
+        }
+
+        migrator.registerMigration("v13_add_calendar_fields_to_meetings") { db in
+            try db.alter(table: "meetings") { t in
+                t.add(column: "calendarEventId", .text)
+                t.add(column: "calendarTitle", .text)
+            }
+        }
+
+        migrator.registerMigration("v14_create_automation_history") { db in
+            try db.create(table: "automation_history") { t in
+                t.column("id", .text).primaryKey()
+                t.column("toolName", .text).notNull()
+                t.column("arguments", .text).notNull()
+                t.column("result", .text)
+                t.column("status", .text).notNull()
+                t.column("triggerSource", .text).notNull()
+                t.column("meetingId", .text)
+                    .references("meetings", onDelete: .cascade)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_automation_history_meetingId",
+                on: "automation_history",
+                columns: ["meetingId"]
+            )
+        }
+
         return migrator
     }
 }

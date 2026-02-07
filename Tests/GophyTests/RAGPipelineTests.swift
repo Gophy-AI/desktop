@@ -210,6 +210,8 @@ final class MockMeetingRepositoryForRAG: MeetingRepositoryProtocol, @unchecked S
     }
     func search(query: String) async throws -> [MeetingRecord] { [] }
     func findOrphaned() async throws -> [MeetingRecord] { [] }
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] { [] }
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {}
 }
 
 final class MockDocumentRepositoryForRAG: DocumentRepositoryProtocol, @unchecked Sendable {

@@ -6,12 +6,14 @@ import SwiftUI
 public final class MeetingDetailViewModel {
     private let meetingRepository: MeetingRepository
     private let chatMessageRepository: ChatMessageRepository
+    private let writebackService: (any MeetingSummaryWritebackProtocol)?
 
     public let meeting: MeetingRecord
     public var transcriptSegments: [TranscriptSegmentRecord] = []
     public var suggestions: [ChatMessageRecord] = []
     public var errorMessage: String?
     public var isLoading = false
+    public var isWritingBack = false
     public var selectedTab: DetailTab = .transcript
 
     public enum DetailTab: String, CaseIterable {
@@ -22,11 +24,13 @@ public final class MeetingDetailViewModel {
     public init(
         meeting: MeetingRecord,
         meetingRepository: MeetingRepository,
-        chatMessageRepository: ChatMessageRepository
+        chatMessageRepository: ChatMessageRepository,
+        writebackService: (any MeetingSummaryWritebackProtocol)? = nil
     ) {
         self.meeting = meeting
         self.meetingRepository = meetingRepository
         self.chatMessageRepository = chatMessageRepository
+        self.writebackService = writebackService
     }
 
     public func loadData() async {
@@ -68,5 +72,26 @@ public final class MeetingDetailViewModel {
 
     public func suggestionCount() -> Int {
         return suggestions.count
+    }
+
+    public func writeSummaryToCalendar() async {
+        guard let writebackService = writebackService else {
+            errorMessage = "Summary writeback service not available"
+            return
+        }
+
+        isWritingBack = true
+        defer { isWritingBack = false }
+
+        do {
+            try await writebackService.writeBack(
+                meetingId: meeting.id,
+                calendarEventId: meeting.calendarEventId,
+                calendarId: nil,
+                existingDescription: nil
+            )
+        } catch {
+            errorMessage = "Failed to write summary: \(error.localizedDescription)"
+        }
     }
 }

@@ -1,6 +1,19 @@
 import Foundation
 import Observation
 import AppKit
+import EventKit
+
+/// Display-only info about a voice pattern for the settings UI.
+public struct VoicePatternInfo: Sendable {
+    public let toolName: String
+    public let description: String
+}
+
+/// Display-only info about a keyboard shortcut for the settings UI.
+public struct ShortcutInfo: Sendable {
+    public let toolName: String
+    public let description: String
+}
 
 @MainActor
 @Observable
@@ -8,6 +21,10 @@ public final class SettingsViewModel {
     private let audioDeviceManager: AudioDeviceManager
     private let storageManager: StorageManager
     private let registry: ModelRegistry
+    private var authService: GoogleAuthService?
+    private var calendarSyncService: (any CalendarSyncServiceProtocol)?
+    private var eventKitService: (any EventKitServiceProtocol)?
+    private var providerRegistry: ProviderRegistry?
 
     var availableInputDevices: [AudioDevice] = []
     var selectedDevice: AudioDevice?
@@ -26,21 +43,69 @@ public final class SettingsViewModel {
     var showClearDataConfirmation: Bool = false
     var errorMessage: String?
 
+    // Automation settings
+    var automationsEnabled: Bool = true
+    var voiceCommandsEnabled: Bool = true
+    var keyboardShortcutsEnabled: Bool = true
+    var alwaysAllowedTools: Set<String> = []
+
+    var voicePatterns: [VoicePatternInfo] {
+        VoicePattern.defaults.map {
+            VoicePatternInfo(toolName: $0.toolName, description: $0.description)
+        }
+    }
+
+    var keyboardShortcuts: [ShortcutInfo] {
+        AutomationShortcut.defaults.map {
+            ShortcutInfo(toolName: $0.toolName, description: $0.description)
+        }
+    }
+
+    var confirmableTools: [String] {
+        ["remember", "generate_summary"]
+    }
+
+    // Provider settings
+    var configuredProviderIds: Set<String> = []
+    var providerErrorMessage: String?
+
+    // Calendar settings
+    var isGoogleSignedIn: Bool = false
+    var googleUserEmail: String?
+    var isSigningIn: Bool = false
+    var calendarErrorMessage: String?
+    var calendarAutoStartEnabled: Bool = true
+    var calendarAutoStartOnlyVideo: Bool = true
+    var calendarAutoStartLeadTime: Double = 60.0
+    var calendarSyncInterval: Double = 300.0
+    var calendarWritebackEnabled: Bool = false
+    var lastCalendarSyncTime: Date?
+    var isSyncingCalendar: Bool = false
+    var eventKitAccessGranted: Bool = false
+
     private var deviceListenerTask: Task<Void, Never>?
 
     init(
         audioDeviceManager: AudioDeviceManager,
         storageManager: StorageManager,
-        registry: ModelRegistry
+        registry: ModelRegistry,
+        authService: GoogleAuthService? = nil,
+        calendarSyncService: (any CalendarSyncServiceProtocol)? = nil,
+        eventKitService: (any EventKitServiceProtocol)? = nil
     ) {
         self.audioDeviceManager = audioDeviceManager
         self.storageManager = storageManager
         self.registry = registry
+        self.authService = authService
+        self.calendarSyncService = calendarSyncService
+        self.eventKitService = eventKitService
         self.databaseLocation = storageManager.databaseDirectory.path
 
         loadSettings()
         startDeviceListener()
         calculateStorage()
+        loadCalendarSettings()
+        loadAutomationSettings()
     }
 
 
@@ -219,6 +284,286 @@ public final class SettingsViewModel {
         } catch {
             errorMessage = "Failed to clear data: \(error.localizedDescription)"
             showClearDataConfirmation = false
+        }
+    }
+
+    // MARK: - Calendar Settings
+
+    private func loadCalendarSettings() {
+        let defaults = UserDefaults.standard
+
+        let autoStartKey = "calendarAutoStartEnabled"
+        if defaults.object(forKey: autoStartKey) != nil {
+            calendarAutoStartEnabled = defaults.bool(forKey: autoStartKey)
+        }
+
+        let onlyVideoKey = "calendarAutoStartOnlyVideo"
+        if defaults.object(forKey: onlyVideoKey) != nil {
+            calendarAutoStartOnlyVideo = defaults.bool(forKey: onlyVideoKey)
+        }
+
+        let leadTimeValue = defaults.double(forKey: "calendarAutoStartLeadTime")
+        if leadTimeValue > 0 {
+            calendarAutoStartLeadTime = leadTimeValue
+        }
+
+        let syncIntervalValue = defaults.double(forKey: "calendarSyncInterval")
+        if syncIntervalValue > 0 {
+            calendarSyncInterval = syncIntervalValue
+        }
+
+        calendarWritebackEnabled = defaults.bool(forKey: "calendarWritebackEnabled")
+
+        if let lastSyncTimestamp = defaults.object(forKey: "calendarLastSyncTime") as? Date {
+            lastCalendarSyncTime = lastSyncTimestamp
+        }
+
+        let ekStatus = EKEventStore.authorizationStatus(for: .event)
+        eventKitAccessGranted = (ekStatus == .authorized || ekStatus == .fullAccess)
+
+        Task {
+            await refreshGoogleAuthStatus()
+        }
+    }
+
+    private func refreshGoogleAuthStatus() async {
+        guard let authService = authService else { return }
+        isGoogleSignedIn = await authService.isSignedIn
+        googleUserEmail = await authService.userEmail
+    }
+
+    func signInGoogle() async {
+        guard let authService = authService else {
+            calendarErrorMessage = "Calendar service not configured"
+            return
+        }
+
+        isSigningIn = true
+        calendarErrorMessage = nil
+
+        do {
+            try await authService.signIn(presentingWindow: nil)
+            isGoogleSignedIn = await authService.isSignedIn
+            googleUserEmail = await authService.userEmail
+        } catch {
+            calendarErrorMessage = error.localizedDescription
+        }
+
+        isSigningIn = false
+    }
+
+    func signOutGoogle() {
+        guard let authService = authService else { return }
+
+        Task {
+            do {
+                try await authService.signOut()
+                isGoogleSignedIn = false
+                googleUserEmail = nil
+                calendarErrorMessage = nil
+            } catch {
+                calendarErrorMessage = "Failed to sign out: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func updateCalendarAutoStart(_ enabled: Bool) {
+        calendarAutoStartEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "calendarAutoStartEnabled")
+    }
+
+    func updateCalendarAutoStartOnlyVideo(_ onlyVideo: Bool) {
+        calendarAutoStartOnlyVideo = onlyVideo
+        UserDefaults.standard.set(onlyVideo, forKey: "calendarAutoStartOnlyVideo")
+    }
+
+    func updateCalendarAutoStartLeadTime(_ seconds: Double) {
+        calendarAutoStartLeadTime = seconds
+        UserDefaults.standard.set(seconds, forKey: "calendarAutoStartLeadTime")
+    }
+
+    func updateCalendarSyncInterval(_ seconds: Double) {
+        calendarSyncInterval = seconds
+        UserDefaults.standard.set(seconds, forKey: "calendarSyncInterval")
+    }
+
+    func updateCalendarWriteback(_ enabled: Bool) {
+        calendarWritebackEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "calendarWritebackEnabled")
+    }
+
+    func syncCalendarNow() async {
+        guard let syncService = calendarSyncService else { return }
+
+        isSyncingCalendar = true
+        do {
+            _ = try await syncService.syncNow()
+            lastCalendarSyncTime = Date()
+            UserDefaults.standard.set(lastCalendarSyncTime, forKey: "calendarLastSyncTime")
+        } catch {
+            calendarErrorMessage = "Sync failed: \(error.localizedDescription)"
+        }
+        isSyncingCalendar = false
+    }
+
+    func requestEventKitAccess() async {
+        guard let eventKitService = eventKitService else {
+            let service = EventKitService()
+            do {
+                let granted = try await service.requestAccess()
+                eventKitAccessGranted = granted
+            } catch {
+                calendarErrorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        do {
+            let granted = try await eventKitService.requestAccess()
+            eventKitAccessGranted = granted
+        } catch {
+            calendarErrorMessage = error.localizedDescription
+        }
+    }
+
+    func setCalendarServices(
+        authService: GoogleAuthService,
+        calendarSyncService: any CalendarSyncServiceProtocol,
+        eventKitService: any EventKitServiceProtocol
+    ) {
+        self.authService = authService
+        self.calendarSyncService = calendarSyncService
+        self.eventKitService = eventKitService
+        loadCalendarSettings()
+    }
+
+    // MARK: - Automation Settings
+
+    private func loadAutomationSettings() {
+        let defaults = UserDefaults.standard
+
+        let enabledKey = "automations.enabled"
+        if defaults.object(forKey: enabledKey) != nil {
+            automationsEnabled = defaults.bool(forKey: enabledKey)
+        }
+
+        let voiceKey = "automations.voiceCommands.enabled"
+        if defaults.object(forKey: voiceKey) != nil {
+            voiceCommandsEnabled = defaults.bool(forKey: voiceKey)
+        }
+
+        let keyboardKey = "automations.shortcuts.enabled"
+        if defaults.object(forKey: keyboardKey) != nil {
+            keyboardShortcutsEnabled = defaults.bool(forKey: keyboardKey)
+        }
+
+        if let saved = defaults.stringArray(forKey: "automations.alwaysAllowedTools") {
+            alwaysAllowedTools = Set(saved)
+        }
+    }
+
+    func updateAutomationsEnabled(_ enabled: Bool) {
+        automationsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "automations.enabled")
+    }
+
+    func updateVoiceCommandsEnabled(_ enabled: Bool) {
+        voiceCommandsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "automations.voiceCommands.enabled")
+    }
+
+    func updateKeyboardShortcutsEnabled(_ enabled: Bool) {
+        keyboardShortcutsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "automations.shortcuts.enabled")
+    }
+
+    func resetAlwaysAllowed() {
+        alwaysAllowedTools.removeAll()
+        UserDefaults.standard.removeObject(forKey: "automations.alwaysAllowedTools")
+    }
+
+    // MARK: - Provider Management
+
+    func setProviderRegistry(_ registry: ProviderRegistry) {
+        self.providerRegistry = registry
+        refreshConfiguredProviders()
+    }
+
+    private func refreshConfiguredProviders() {
+        guard let registry = providerRegistry else { return }
+        configuredProviderIds = Set(registry.configuredProviders())
+    }
+
+    func isProviderConfigured(_ providerId: String) -> Bool {
+        configuredProviderIds.contains(providerId)
+    }
+
+    func configuredProviderConfigs(for capability: ProviderCapability) -> [ProviderConfiguration] {
+        ProviderCatalog.all.filter { config in
+            configuredProviderIds.contains(config.id) && config.supportedCapabilities.contains(capability)
+        }
+    }
+
+    func selectedProviderIdFor(_ capability: ProviderCapability) -> String {
+        providerRegistry?.selectedProviderId(for: capability) ?? "local"
+    }
+
+    func selectedModelIdFor(_ capability: ProviderCapability) -> String {
+        providerRegistry?.selectedModelId(for: capability) ?? ""
+    }
+
+    func availableCloudModels(for capability: ProviderCapability, providerId: String) -> [CloudModelDefinition] {
+        guard providerId != "local",
+              let config = ProviderCatalog.provider(id: providerId) else {
+            return []
+        }
+        return config.availableModels.filter { $0.capability == capability }
+    }
+
+    func selectCloudProvider(for capability: ProviderCapability, providerId: String, modelId: String) {
+        providerRegistry?.selectProvider(for: capability, providerId: providerId, modelId: modelId)
+    }
+
+    func saveProviderAPIKey(providerId: String, apiKey: String) {
+        guard let registry = providerRegistry else {
+            providerErrorMessage = "Provider registry not configured"
+            return
+        }
+
+        do {
+            try registry.configureProvider(id: providerId, apiKey: apiKey)
+            refreshConfiguredProviders()
+            providerErrorMessage = nil
+        } catch {
+            providerErrorMessage = "Failed to save API key: \(error.localizedDescription)"
+        }
+    }
+
+    func removeProviderAPIKey(providerId: String) {
+        guard let registry = providerRegistry else { return }
+
+        do {
+            try registry.removeProvider(id: providerId)
+            refreshConfiguredProviders()
+            providerErrorMessage = nil
+        } catch {
+            providerErrorMessage = "Failed to remove API key: \(error.localizedDescription)"
+        }
+    }
+
+    func testProviderConnection(providerId: String) async -> TestConnectionResult {
+        guard let registry = providerRegistry else {
+            return TestConnectionResult(isHealthy: false, message: "Provider registry not available")
+        }
+
+        let status = await registry.checkHealth(providerId: providerId)
+        switch status {
+        case .healthy:
+            return TestConnectionResult(isHealthy: true, message: "Connection successful")
+        case .degraded(let msg):
+            return TestConnectionResult(isHealthy: false, message: "Degraded: \(msg)")
+        case .unavailable(let msg):
+            return TestConnectionResult(isHealthy: false, message: msg)
         }
     }
 }

@@ -16,14 +16,53 @@ extension TextGenerationEngine: TextGenerationProviding {}
 extension VectorSearchService: VectorSearching {}
 extension DocumentRepository: DocumentRepositoryProtocol {}
 
+/// Adapter that wraps TextGenerationProviding as a TextGenerationProvider for RAG
+private final class TextGenProvidingAdapter: TextGenerationProvider, @unchecked Sendable {
+    private let engine: any TextGenerationProviding
+
+    init(engine: any TextGenerationProviding) {
+        self.engine = engine
+    }
+
+    func generate(prompt: String, systemPrompt: String, maxTokens: Int, temperature: Double) -> AsyncThrowingStream<String, Error> {
+        let stream = engine.generate(prompt: prompt, systemPrompt: systemPrompt, maxTokens: maxTokens)
+        return AsyncThrowingStream { continuation in
+            Task {
+                for await token in stream {
+                    continuation.yield(token)
+                }
+                continuation.finish()
+            }
+        }
+    }
+}
+
 public final class RAGPipeline: Sendable {
     private let embeddingEngine: any EmbeddingProviding
     private let vectorSearchService: any VectorSearching
-    private let textGenerationEngine: any TextGenerationProviding
+    private let textGenProvider: any TextGenerationProvider
     private let meetingRepository: any MeetingRepositoryProtocol
     private let documentRepository: any DocumentRepositoryProtocol
     private let topK: Int
 
+    /// Initialize with a TextGenerationProvider directly
+    public init(
+        embeddingEngine: any EmbeddingProviding,
+        vectorSearchService: any VectorSearching,
+        textGenProvider: any TextGenerationProvider,
+        meetingRepository: any MeetingRepositoryProtocol,
+        documentRepository: any DocumentRepositoryProtocol,
+        topK: Int = 10
+    ) {
+        self.embeddingEngine = embeddingEngine
+        self.vectorSearchService = vectorSearchService
+        self.textGenProvider = textGenProvider
+        self.meetingRepository = meetingRepository
+        self.documentRepository = documentRepository
+        self.topK = topK
+    }
+
+    /// Initialize with the legacy TextGenerationProviding protocol (backwards compatible)
     public init(
         embeddingEngine: any EmbeddingProviding,
         vectorSearchService: any VectorSearching,
@@ -34,7 +73,7 @@ public final class RAGPipeline: Sendable {
     ) {
         self.embeddingEngine = embeddingEngine
         self.vectorSearchService = vectorSearchService
-        self.textGenerationEngine = textGenerationEngine
+        self.textGenProvider = TextGenProvidingAdapter(engine: textGenerationEngine)
         self.meetingRepository = meetingRepository
         self.documentRepository = documentRepository
         self.topK = topK
@@ -63,13 +102,14 @@ public final class RAGPipeline: Sendable {
 
                     let prompt = "Question: \(question)"
 
-                    let responseStream = textGenerationEngine.generate(
+                    let responseStream = textGenProvider.generate(
                         prompt: prompt,
                         systemPrompt: systemPrompt,
-                        maxTokens: 512
+                        maxTokens: 512,
+                        temperature: 0.7
                     )
 
-                    for await token in responseStream {
+                    for try await token in responseStream {
                         continuation.yield(token)
                     }
 

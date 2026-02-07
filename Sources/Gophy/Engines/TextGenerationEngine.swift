@@ -12,7 +12,12 @@ public final class TextGenerationEngine: @unchecked Sendable {
     }
 
     public func load() async throws {
-        guard let textGenModel = modelRegistry.availableModels().first(where: { $0.type == .textGen }) else {
+        let selectedId = UserDefaults.standard.string(forKey: "selectedTextGenModelId") ?? "qwen2.5-7b-instruct-4bit"
+        let textGenModels = modelRegistry.availableModels().filter { $0.type == .textGen }
+
+        guard let textGenModel = textGenModels.first(where: { $0.id == selectedId && modelRegistry.isDownloaded($0) })
+                ?? textGenModels.first(where: { modelRegistry.isDownloaded($0) })
+                ?? textGenModels.first else {
             throw TextGenerationError.modelNotFound
         }
 
@@ -84,11 +89,80 @@ public final class TextGenerationEngine: @unchecked Sendable {
         }
     }
 
+    public func generateWithTools(
+        prompt: String,
+        systemPrompt: String = "",
+        tools: [[String: any Sendable]]? = nil,
+        maxTokens: Int = 512
+    ) -> AsyncStream<GenerationEvent> {
+        AsyncStream { continuation in
+            guard let modelContainer else {
+                continuation.yield(.done)
+                continuation.finish()
+                return
+            }
+
+            Task {
+                do {
+                    let messages: [[String: String]]
+                    if systemPrompt.isEmpty {
+                        messages = [["role": "user", "content": prompt]]
+                    } else {
+                        messages = [
+                            ["role": "system", "content": systemPrompt],
+                            ["role": "user", "content": prompt],
+                        ]
+                    }
+
+                    let userInput = UserInput(messages: messages, tools: tools)
+                    let input = try await modelContainer.prepare(input: userInput)
+
+                    let parameters = GenerateParameters(
+                        maxTokens: maxTokens,
+                        temperature: 0.7
+                    )
+
+                    var tokenCount = 0
+
+                    let stream = try await modelContainer.generate(
+                        input: input,
+                        parameters: parameters
+                    )
+
+                    for await generation in stream {
+                        switch generation {
+                        case .chunk(let text):
+                            continuation.yield(.text(text))
+                            tokenCount += 1
+                            if tokenCount >= maxTokens {
+                                continuation.yield(.done)
+                                continuation.finish()
+                                return
+                            }
+                        case .toolCall(let toolCall):
+                            continuation.yield(.toolCall(toolCall))
+                        case .info:
+                            break
+                        }
+                    }
+
+                    continuation.yield(.done)
+                    continuation.finish()
+                } catch {
+                    continuation.yield(.done)
+                    continuation.finish()
+                }
+            }
+        }
+    }
+
     public func unload() {
         modelContainer = nil
         isLoaded = false
     }
 }
+
+extension TextGenerationEngine: TextGenerationWithToolsProviding {}
 
 public enum TextGenerationError: Error, Sendable {
     case modelNotLoaded

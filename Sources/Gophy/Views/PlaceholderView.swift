@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct PlaceholderView: View {
     let item: SidebarItem
+    @State private var playbackMeeting: MeetingRecord?
 
     var body: some View {
         switch item {
@@ -21,12 +22,43 @@ struct PlaceholderView: View {
             } else {
                 errorView
             }
+        case .recordings:
+            recordingsView
         case .documents:
             DocumentManagerView()
         case .chat:
             ChatView()
         case .settings:
             SettingsView()
+        }
+    }
+
+    private var recordingsView: some View {
+        Group {
+            if let database = try? GophyDatabase(storageManager: StorageManager()) {
+                let storageManager = StorageManager()
+                let meetingRepo = MeetingRepository(database: database)
+                RecordingImportView(
+                    meetingRepository: meetingRepo,
+                    storageManager: storageManager,
+                    onOpenPlayback: { meeting in
+                        playbackMeeting = meeting
+                    }
+                )
+                .sheet(item: $playbackMeeting) { meeting in
+                    if let path = meeting.sourceFilePath {
+                        PlaybackMeetingContainerView(
+                            meeting: meeting,
+                            fileURL: URL(fileURLWithPath: path),
+                            onDismiss: {
+                                playbackMeeting = nil
+                            }
+                        )
+                    }
+                }
+            } else {
+                errorView
+            }
         }
     }
 

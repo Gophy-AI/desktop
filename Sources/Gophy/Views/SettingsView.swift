@@ -16,6 +16,9 @@ struct SettingsView: View {
                 }
 
                 languageSection
+                ProviderSettingsSection(viewModel: viewModel)
+                CalendarSettingsSection(viewModel: viewModel)
+                AutomationSettingsView(viewModel: viewModel)
                 audioSection
                 modelsSection
                 storageSection

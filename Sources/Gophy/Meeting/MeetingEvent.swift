@@ -14,6 +14,7 @@ public enum MeetingEvent: Sendable {
     case suggestion(String)
     case statusChange(MeetingStatus)
     case playbackProgress(currentTime: TimeInterval, duration: TimeInterval)
+    case automation(AutomationEvent)
     case error(Error)
 }
 

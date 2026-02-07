@@ -30,6 +30,8 @@ public protocol MeetingRepositoryProtocol: Sendable {
     func getSegment(id: String) async throws -> TranscriptSegmentRecord?
     func search(query: String) async throws -> [MeetingRecord]
     func findOrphaned() async throws -> [MeetingRecord]
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord]
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws
 }
 
 extension MeetingRepository: MeetingRepositoryProtocol {}
@@ -51,6 +53,17 @@ extension AudioMixer: AudioMixerProtocol {}
 
 // MARK: - MeetingSessionController
 
+public protocol MeetingSummaryWritebackProtocol: Sendable {
+    func writeBack(
+        meetingId: String,
+        calendarEventId: String?,
+        calendarId: String?,
+        existingDescription: String?
+    ) async throws
+}
+
+extension MeetingSummaryWritebackService: MeetingSummaryWritebackProtocol {}
+
 public actor MeetingSessionController {
     private let modeController: any ModeControllerProtocol
     private let transcriptionPipeline: any TranscriptionPipelineProtocol
@@ -58,11 +71,15 @@ public actor MeetingSessionController {
     private let embeddingPipeline: any EmbeddingPipelineProtocol
     private let microphoneCapture: any MicrophoneCaptureProtocol
     private let systemAudioCapture: any SystemAudioCaptureProtocol
+    private let writebackService: (any MeetingSummaryWritebackProtocol)?
+    private let automationManager: (any AutomationManaging)?
 
     private var currentMeetingId: String?
+    private var currentCalendarEventId: String?
     private var currentStatus: MeetingStatus = .idle
     private var eventContinuation: AsyncStream<MeetingEvent>.Continuation?
     private var transcriptionTask: Task<Void, Never>?
+    private var automationTask: Task<Void, Never>?
 
     public nonisolated let eventStream: AsyncStream<MeetingEvent>
 
@@ -76,7 +93,9 @@ public actor MeetingSessionController {
         meetingRepository: any MeetingRepositoryProtocol,
         embeddingPipeline: any EmbeddingPipelineProtocol,
         microphoneCapture: any MicrophoneCaptureProtocol,
-        systemAudioCapture: any SystemAudioCaptureProtocol
+        systemAudioCapture: any SystemAudioCaptureProtocol,
+        writebackService: (any MeetingSummaryWritebackProtocol)? = nil,
+        automationManager: (any AutomationManaging)? = nil
     ) {
         self.modeController = modeController
         self.transcriptionPipeline = transcriptionPipeline
@@ -84,6 +103,8 @@ public actor MeetingSessionController {
         self.embeddingPipeline = embeddingPipeline
         self.microphoneCapture = microphoneCapture
         self.systemAudioCapture = systemAudioCapture
+        self.writebackService = writebackService
+        self.automationManager = automationManager
 
         var continuation: AsyncStream<MeetingEvent>.Continuation?
         self.eventStream = AsyncStream { cont in
@@ -112,7 +133,7 @@ public actor MeetingSessionController {
         return orphanedMeetings
     }
 
-    public func start(title: String) async throws {
+    public func start(title: String, calendarEventId: String? = nil) async throws {
         logger.info("Starting meeting: \(title, privacy: .public)")
 
         guard currentStatus == .idle || currentStatus == .completed else {
@@ -137,11 +158,13 @@ public actor MeetingSessionController {
             endedAt: nil,
             mode: "meeting",
             status: "active",
-            createdAt: Date()
+            createdAt: Date(),
+            calendarEventId: calendarEventId
         )
         logger.info("Creating meeting record...")
         try await meetingRepository.create(meeting)
         currentMeetingId = meetingId
+        currentCalendarEventId = calendarEventId
         logger.info("Meeting record created: \(meetingId, privacy: .public)")
 
         // Start audio capture and create mixer with the streams
@@ -175,10 +198,29 @@ public actor MeetingSessionController {
         let transcriptStream = transcriptionPipeline.start(mixedStream: mixedStream)
         logger.info("Transcription pipeline started")
 
+        // Create a secondary stream for automation voice triggers
+        let (automationTranscriptStream, automationTranscriptContinuation) =
+            AsyncStream<TranscriptSegment>.makeStream()
+
         // Process transcript segments
         transcriptionTask = Task {
             for await segment in transcriptStream {
                 await handleTranscriptSegment(segment, meetingId: meetingId)
+                automationTranscriptContinuation.yield(segment)
+            }
+            automationTranscriptContinuation.finish()
+        }
+
+        // Activate automations if available
+        if let automationManager {
+            let automationEvents = await automationManager.activateForMeeting(
+                meetingId: meetingId,
+                transcriptStream: automationTranscriptStream
+            )
+            automationTask = Task {
+                for await event in automationEvents {
+                    eventContinuation?.yield(.automation(event))
+                }
             }
         }
 
@@ -192,6 +234,11 @@ public actor MeetingSessionController {
         }
 
         updateStatus(.stopping)
+
+        // Deactivate automations
+        automationTask?.cancel()
+        automationTask = nil
+        await automationManager?.deactivate()
 
         // Stop audio capture
         await microphoneCapture.stop()
@@ -228,7 +275,24 @@ public actor MeetingSessionController {
             logger.warning("Skipping vector indexing: \(error.localizedDescription, privacy: .public)")
         }
 
+        // Trigger summary writeback to Google Calendar if enabled
+        if UserDefaults.standard.bool(forKey: "calendarWritebackEnabled"),
+           let calendarEventId = currentCalendarEventId {
+            do {
+                try await writebackService?.writeBack(
+                    meetingId: meetingId,
+                    calendarEventId: calendarEventId,
+                    calendarId: nil,
+                    existingDescription: nil
+                )
+                logger.info("Summary written back to calendar")
+            } catch {
+                logger.warning("Skipping summary writeback: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
         currentMeetingId = nil
+        currentCalendarEventId = nil
         updateStatus(.completed)
         logger.info("Meeting stopped successfully")
     }

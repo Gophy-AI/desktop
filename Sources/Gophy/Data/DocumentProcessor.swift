@@ -13,6 +13,33 @@ public protocol EmbeddingPipelineProviding: Sendable {
 
 extension EmbeddingPipeline: EmbeddingPipelineProviding {}
 
+/// Adapter that wraps a VisionProvider as an OCREngineProviding for DocumentProcessor
+private final class VisionProviderOCRAdapter: OCREngineProviding, @unchecked Sendable {
+    private let provider: any VisionProvider
+
+    init(provider: any VisionProvider) {
+        self.provider = provider
+    }
+
+    func extractText(from fileURL: URL) async throws -> String {
+        guard let image = NSImage(contentsOf: fileURL),
+              let data = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: data),
+              let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
+            throw DocumentProcessingError.ocrFailed("Failed to load image from file")
+        }
+        return try await provider.extractText(from: jpegData, prompt: "Extract all text from this image. Return only the extracted text with no additional commentary.")
+    }
+
+    func extractText(from cgImage: CGImage) async throws -> String {
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
+            throw DocumentProcessingError.ocrFailed("Failed to convert image to JPEG")
+        }
+        return try await provider.extractText(from: jpegData, prompt: "Extract all text from this image. Return only the extracted text with no additional commentary.")
+    }
+}
+
 public final class DocumentProcessor: Sendable {
     private let documentRepository: DocumentRepository
     private let ocrEngine: any OCREngineProviding
@@ -30,6 +57,22 @@ public final class DocumentProcessor: Sendable {
         precondition(chunkSize > chunkOverlap, "chunkSize must be greater than chunkOverlap to avoid infinite loops")
         self.documentRepository = documentRepository
         self.ocrEngine = ocrEngine
+        self.embeddingPipeline = embeddingPipeline
+        self.chunkSize = chunkSize
+        self.chunkOverlap = chunkOverlap
+    }
+
+    /// Initialize with a VisionProvider for cloud-based OCR
+    public init(
+        documentRepository: DocumentRepository,
+        visionProvider: any VisionProvider,
+        embeddingPipeline: any EmbeddingPipelineProviding,
+        chunkSize: Int = 500,
+        chunkOverlap: Int = 100
+    ) {
+        precondition(chunkSize > chunkOverlap, "chunkSize must be greater than chunkOverlap to avoid infinite loops")
+        self.documentRepository = documentRepository
+        self.ocrEngine = VisionProviderOCRAdapter(provider: visionProvider)
         self.embeddingPipeline = embeddingPipeline
         self.chunkSize = chunkSize
         self.chunkOverlap = chunkOverlap

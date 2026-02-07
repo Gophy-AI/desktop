@@ -318,6 +318,14 @@ actor MockMeetingRepository: MeetingRepositoryProtocol {
         orphanedMeetings
     }
 
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] {
+        []
+    }
+
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {
+        // No-op
+    }
+
     func setOrphanedMeetings(_ meetings: [MeetingRecord]) {
         orphanedMeetings = meetings
     }

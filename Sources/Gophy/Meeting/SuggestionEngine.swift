@@ -34,10 +34,31 @@ public protocol DocumentRepositoryForSuggestion: Sendable {
 
 extension DocumentRepository: DocumentRepositoryForSuggestion {}
 
+/// Adapter that wraps TextGenerationForSuggestion as a TextGenerationProvider
+private final class TextGenProviderAdapter: TextGenerationProvider, @unchecked Sendable {
+    private let engine: any TextGenerationForSuggestion
+
+    init(engine: any TextGenerationForSuggestion) {
+        self.engine = engine
+    }
+
+    func generate(prompt: String, systemPrompt: String, maxTokens: Int, temperature: Double) -> AsyncThrowingStream<String, Error> {
+        let stream = engine.generate(prompt: prompt, systemPrompt: systemPrompt, maxTokens: maxTokens)
+        return AsyncThrowingStream { continuation in
+            Task {
+                for await token in stream {
+                    continuation.yield(token)
+                }
+                continuation.finish()
+            }
+        }
+    }
+}
+
 // MARK: - SuggestionEngine
 
 public actor SuggestionEngine {
-    private let textGenerationEngine: any TextGenerationForSuggestion
+    private let textGenProvider: any TextGenerationProvider
     private let vectorSearchService: any VectorSearchForSuggestion
     private let embeddingEngine: any EmbeddingProviding
     private let meetingRepository: any MeetingRepositoryProtocol
@@ -51,6 +72,26 @@ public actor SuggestionEngine {
         Keep your response brief and focused on the most important point.
         """
 
+    /// Initialize with a TextGenerationProvider directly
+    public init(
+        textGenProvider: any TextGenerationProvider,
+        vectorSearchService: any VectorSearchForSuggestion,
+        embeddingEngine: any EmbeddingProviding,
+        meetingRepository: any MeetingRepositoryProtocol,
+        documentRepository: any DocumentRepositoryForSuggestion,
+        chatMessageRepository: any ChatMessageRepoForSuggestion,
+        autoTriggerInterval: TimeInterval = 30.0
+    ) {
+        self.textGenProvider = textGenProvider
+        self.vectorSearchService = vectorSearchService
+        self.embeddingEngine = embeddingEngine
+        self.meetingRepository = meetingRepository
+        self.documentRepository = documentRepository
+        self.chatMessageRepository = chatMessageRepository
+        self.autoTriggerInterval = autoTriggerInterval
+    }
+
+    /// Initialize with the legacy TextGenerationForSuggestion protocol (backwards compatible)
     public init(
         textGenerationEngine: any TextGenerationForSuggestion,
         vectorSearchService: any VectorSearchForSuggestion,
@@ -60,7 +101,7 @@ public actor SuggestionEngine {
         chatMessageRepository: any ChatMessageRepoForSuggestion,
         autoTriggerInterval: TimeInterval = 30.0
     ) {
-        self.textGenerationEngine = textGenerationEngine
+        self.textGenProvider = TextGenProviderAdapter(engine: textGenerationEngine)
         self.vectorSearchService = vectorSearchService
         self.embeddingEngine = embeddingEngine
         self.meetingRepository = meetingRepository
@@ -145,13 +186,14 @@ public actor SuggestionEngine {
 
                     // Generate suggestion
                     var fullSuggestion = ""
-                    let stream = self.textGenerationEngine.generate(
+                    let stream = self.textGenProvider.generate(
                         prompt: prompt,
                         systemPrompt: self.systemPrompt,
-                        maxTokens: 150
+                        maxTokens: 150,
+                        temperature: 0.7
                     )
 
-                    for await token in stream {
+                    for try await token in stream {
                         fullSuggestion += token
                         continuation.yield(token)
                     }

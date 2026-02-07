@@ -5,7 +5,7 @@ private let logger = Logger(subsystem: "com.gophy.app", category: "PlaybackSessi
 
 /// Controller for audio file playback sessions with real-time transcription
 public actor PlaybackSessionController {
-    private let playbackService: any RecordingPlaybackProtocol
+    public nonisolated let playbackService: any RecordingPlaybackProtocol
     private let transcriptionPipeline: any TranscriptionPipelineProtocol
     private let meetingRepository: any MeetingRepositoryProtocol
     private let embeddingPipeline: any EmbeddingPipelineProtocol
@@ -54,7 +54,8 @@ public actor PlaybackSessionController {
             endedAt: nil,
             mode: "playback",
             status: "active",
-            createdAt: Date()
+            createdAt: Date(),
+            sourceFilePath: fileURL.path
         )
         try await meetingRepository.create(meeting)
         currentMeetingId = meetingId
@@ -127,7 +128,8 @@ public actor PlaybackSessionController {
             endedAt: Date(),
             mode: meeting.mode,
             status: "completed",
-            createdAt: meeting.createdAt
+            createdAt: meeting.createdAt,
+            sourceFilePath: meeting.sourceFilePath
         )
         try await meetingRepository.update(updatedMeeting)
 

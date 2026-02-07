@@ -5,6 +5,12 @@ struct GophyApp: App {
     @State private var selectedItem: SidebarItem? = .meetings
     @State private var showOnboarding: Bool = !OnboardingViewModel.hasCompletedOnboarding()
 
+    init() {
+        // Install crash reporter as early as possible
+        CrashReporter.shared.install()
+        CrashReporter.shared.logInfo("GophyApp initializing")
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(selectedItem: $selectedItem)
@@ -27,6 +33,11 @@ struct GophyApp: App {
                     selectedItem = .meetings
                 }
                 .keyboardShortcut("n", modifiers: .command)
+
+                Button("Import Recording") {
+                    selectedItem = .recordings
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
         }
 
@@ -57,7 +68,9 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(selectedItem: $selectedItem)
+            SidebarView(
+                selectedItem: $selectedItem
+            )
         } detail: {
             if let item = selectedItem {
                 PlaceholderView(item: item)
@@ -88,15 +101,18 @@ struct ContentView: View {
                     selectedItem = .meetings
                     return nil
                 case "2":
-                    selectedItem = .documents
+                    selectedItem = .recordings
                     return nil
                 case "3":
-                    selectedItem = .chat
+                    selectedItem = .documents
                     return nil
                 case "4":
-                    selectedItem = .models
+                    selectedItem = .chat
                     return nil
                 case "5":
+                    selectedItem = .models
+                    return nil
+                case "6":
                     selectedItem = .settings
                     return nil
                 case ",":

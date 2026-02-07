@@ -28,8 +28,12 @@ struct OnboardingView: View {
             PermissionsStep(viewModel: viewModel)
         case .language:
             LanguageStep(viewModel: viewModel)
+        case .calendar:
+            CalendarOnboardingStep(viewModel: viewModel)
         case .models:
             ModelsStep(viewModel: viewModel)
+        case .cloudProviders:
+            CloudProvidersOnboardingStep()
         case .done:
             DoneStep(onComplete: {
                 viewModel.completeOnboarding()
@@ -394,6 +398,138 @@ struct OnboardingModelRow: View {
         .padding()
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(8)
+    }
+}
+
+struct CalendarOnboardingStep: View {
+    @Bindable var viewModel: OnboardingViewModel
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 64))
+                .foregroundStyle(.blue)
+
+            Text("Connect Your Calendar")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Text("Optionally connect calendars to see upcoming meetings, auto-start recordings, and write summaries back to events")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(viewModel.eventKitGranted ? Color.green : Color.orange)
+                        .frame(width: 8, height: 8)
+
+                    Text("Local Calendars (EventKit)")
+                        .font(.subheadline)
+
+                    Spacer()
+
+                    if viewModel.eventKitGranted {
+                        Text("Granted")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    } else {
+                        Button("Grant Access") {
+                            Task {
+                                await viewModel.requestEventKitAccess()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding()
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(8)
+
+                HStack(spacing: 12) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundStyle(.blue)
+
+                    Text("Google Calendar can be connected later in Settings")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .frame(maxWidth: 400)
+
+            Button("Skip for Now") {
+                viewModel.skipCalendarSetup()
+                viewModel.nextStep()
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+    }
+}
+
+struct CloudProvidersOnboardingStep: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "cloud.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.blue)
+
+            Text("Cloud AI Providers")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Text("Optionally use cloud AI providers like OpenAI, Anthropic, or Google Gemini for higher-quality transcription, suggestions, and more.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+
+            VStack(alignment: .leading, spacing: 12) {
+                FeatureRow(
+                    icon: "bolt.fill",
+                    title: "Faster Processing",
+                    description: "Cloud providers can be faster than on-device models"
+                )
+                FeatureRow(
+                    icon: "sparkles",
+                    title: "More Capable Models",
+                    description: "Access GPT-4o, Claude, Gemini, and more"
+                )
+                FeatureRow(
+                    icon: "lock.shield.fill",
+                    title: "Your API Keys",
+                    description: "Keys are stored securely in macOS Keychain"
+                )
+            }
+            .frame(maxWidth: 400)
+
+            HStack(spacing: 12) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(.blue)
+
+                Text("You can configure cloud providers anytime in Settings > AI Providers")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(8)
+            .frame(maxWidth: 400)
+
+            Spacer()
+        }
     }
 }
 

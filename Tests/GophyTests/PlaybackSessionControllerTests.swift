@@ -470,6 +470,14 @@ actor MockMeetingRepositoryForPlayback: MeetingRepositoryProtocol {
     func findOrphaned() async throws -> [MeetingRecord] {
         []
     }
+
+    func getSpeakerLabels(meetingId: String) async throws -> [SpeakerLabelRecord] {
+        []
+    }
+
+    func upsertSpeakerLabel(_ label: SpeakerLabelRecord) async throws {
+        // No-op
+    }
 }
 
 // MARK: - Mock EmbeddingPipeline

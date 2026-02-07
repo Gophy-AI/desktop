@@ -83,6 +83,21 @@ struct MeetingDetailView: View {
 
                 Spacer()
 
+                if viewModel.meeting.calendarEventId != nil {
+                    Button(action: {
+                        Task {
+                            await viewModel.writeSummaryToCalendar()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar.badge.checkmark")
+                            Text(viewModel.isWritingBack ? "Writing..." : "Write Summary to Calendar")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isWritingBack || viewModel.transcriptSegments.isEmpty)
+                }
+
                 Button(action: {}) {
                     HStack(spacing: 4) {
                         Image(systemName: "square.and.arrow.up")
