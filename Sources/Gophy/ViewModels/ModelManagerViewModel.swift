@@ -15,6 +15,12 @@ final class ModelManagerViewModel {
     var searchQuery: String = ""
     var selectedTypeFilter: ModelType?
 
+    // Per-task model selection (UserDefaults keys shared with SettingsViewModel)
+    var selectedSTTModelId: String = "whisperkit-large-v3-turbo"
+    var selectedTextGenModelId: String = "qwen2.5-7b-instruct-4bit"
+    var selectedOCRModelId: String = "qwen2.5-vl-7b-instruct-4bit"
+    var selectedEmbeddingModelId: String = "multilingual-e5-small"
+
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var allModels: [ModelDefinition] = []
 
@@ -29,6 +35,7 @@ final class ModelManagerViewModel {
 
         loadModels()
         calculateDiskUsage()
+        loadModelSelections()
     }
 
     func loadModels() {
@@ -152,5 +159,42 @@ final class ModelManagerViewModel {
 
     var hasDownloadedModels: Bool {
         models.contains { registry.isDownloaded($0) }
+    }
+
+    // MARK: - Per-Task Model Selection
+
+    private func loadModelSelections() {
+        let defaults = UserDefaults.standard
+        if let id = defaults.string(forKey: "selectedSTTModelId") { selectedSTTModelId = id }
+        if let id = defaults.string(forKey: "selectedTextGenModelId") { selectedTextGenModelId = id }
+        if let id = defaults.string(forKey: "selectedOCRModelId") { selectedOCRModelId = id }
+        if let id = defaults.string(forKey: "selectedEmbeddingModelId") { selectedEmbeddingModelId = id }
+    }
+
+    func isSelectedModel(_ model: ModelDefinition) -> Bool {
+        switch model.type {
+        case .stt: return model.id == selectedSTTModelId
+        case .textGen: return model.id == selectedTextGenModelId
+        case .ocr: return model.id == selectedOCRModelId
+        case .embedding: return model.id == selectedEmbeddingModelId
+        }
+    }
+
+    func selectModel(_ model: ModelDefinition) {
+        let defaults = UserDefaults.standard
+        switch model.type {
+        case .stt:
+            selectedSTTModelId = model.id
+            defaults.set(model.id, forKey: "selectedSTTModelId")
+        case .textGen:
+            selectedTextGenModelId = model.id
+            defaults.set(model.id, forKey: "selectedTextGenModelId")
+        case .ocr:
+            selectedOCRModelId = model.id
+            defaults.set(model.id, forKey: "selectedOCRModelId")
+        case .embedding:
+            selectedEmbeddingModelId = model.id
+            defaults.set(model.id, forKey: "selectedEmbeddingModelId")
+        }
     }
 }

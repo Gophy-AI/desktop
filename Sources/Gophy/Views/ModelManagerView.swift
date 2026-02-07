@@ -53,10 +53,12 @@ struct ModelManagerView: View {
                         model: model,
                         isDownloaded: viewModel.isDownloaded(model),
                         isDownloading: viewModel.isDownloading(model),
+                        isSelected: viewModel.isSelectedModel(model),
                         progress: viewModel.downloadProgress[model.id],
                         onDownload: { viewModel.downloadModel(model) },
                         onCancel: { viewModel.cancelDownload(model) },
-                        onDelete: { viewModel.deleteModel(model) }
+                        onDelete: { viewModel.deleteModel(model) },
+                        onSelect: { viewModel.selectModel(model) }
                     )
                 }
             }
@@ -136,10 +138,12 @@ struct ModelRow: View {
     let model: ModelDefinition
     let isDownloaded: Bool
     let isDownloading: Bool
+    let isSelected: Bool
     let progress: DownloadProgress?
     let onDownload: () -> Void
     let onCancel: () -> Void
     let onDelete: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -153,6 +157,17 @@ struct ModelRow: View {
                     HStack {
                         Text(model.name)
                             .font(.headline)
+
+                        if isSelected {
+                            Text("Active")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.15))
+                                .foregroundStyle(Color.accentColor)
+                                .cornerRadius(4)
+                        }
 
                         Spacer()
 
@@ -184,13 +199,23 @@ struct ModelRow: View {
 
                 Spacer()
 
-                ActionButton(
-                    isDownloaded: isDownloaded,
-                    isDownloading: isDownloading,
-                    onDownload: onDownload,
-                    onCancel: onCancel,
-                    onDelete: onDelete
-                )
+                HStack(spacing: 8) {
+                    if isDownloaded && !isSelected {
+                        Button(action: onSelect) {
+                            Text("Use")
+                                .frame(width: 50)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    ActionButton(
+                        isDownloaded: isDownloaded,
+                        isDownloading: isDownloading,
+                        onDownload: onDownload,
+                        onCancel: onCancel,
+                        onDelete: onDelete
+                    )
+                }
             }
 
             if isDownloading, let progress = progress {
