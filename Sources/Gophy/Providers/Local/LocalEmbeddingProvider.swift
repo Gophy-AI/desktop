@@ -11,7 +11,7 @@ public final class LocalEmbeddingProvider: EmbeddingProvider, @unchecked Sendabl
     private let engine: any EmbeddingCapable
     public let dimensions: Int
 
-    public init(engine: any EmbeddingCapable, dimensions: Int = 384) {
+    public init(engine: any EmbeddingCapable, dimensions: Int) {
         self.engine = engine
         self.dimensions = dimensions
     }

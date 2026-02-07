@@ -51,11 +51,17 @@ public final class TextGenerationEngine: @unchecked Sendable {
                         ]
                     }
 
-                    let input = try await modelContainer.prepare(input: .init(messages: messages))
+                    let thinkingEnabled = UserDefaults.standard.object(forKey: "inference.thinkingEnabled") == nil
+                        ? true
+                        : UserDefaults.standard.bool(forKey: "inference.thinkingEnabled")
+                    let input = try await modelContainer.prepare(
+                        input: .init(messages: messages, additionalContext: ["enable_thinking": thinkingEnabled])
+                    )
 
+                    let temperature = UserDefaults.standard.double(forKey: "inference.temperature")
                     let parameters = GenerateParameters(
                         maxTokens: maxTokens,
-                        temperature: 0.7
+                        temperature: temperature > 0 ? Float(temperature) : 0.7
                     )
 
                     var tokenCount = 0
@@ -114,12 +120,16 @@ public final class TextGenerationEngine: @unchecked Sendable {
                         ]
                     }
 
-                    let userInput = UserInput(messages: messages, tools: tools)
+                    let thinkingEnabled = UserDefaults.standard.object(forKey: "inference.thinkingEnabled") == nil
+                        ? true
+                        : UserDefaults.standard.bool(forKey: "inference.thinkingEnabled")
+                    let userInput = UserInput(messages: messages, tools: tools, additionalContext: ["enable_thinking": thinkingEnabled])
                     let input = try await modelContainer.prepare(input: userInput)
 
+                    let temperature = UserDefaults.standard.double(forKey: "inference.temperature")
                     let parameters = GenerateParameters(
                         maxTokens: maxTokens,
-                        temperature: 0.7
+                        temperature: temperature > 0 ? Float(temperature) : 0.7
                     )
 
                     var tokenCount = 0

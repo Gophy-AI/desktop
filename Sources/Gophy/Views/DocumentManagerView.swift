@@ -299,7 +299,10 @@ struct DocumentManagerView: View {
                 }
             }
 
-            let vectorSearchService = VectorSearchService(database: database)
+            let vectorSearchService = VectorSearchService(database: database, embeddingDimension: embeddingEngine.embeddingDimension)
+            if embeddingEngine.embeddingDimension > 0 {
+                try await vectorSearchService.ensureDimension(embeddingEngine.embeddingDimension)
+            }
             let embeddingPipeline = EmbeddingPipeline(
                 embeddingEngine: embeddingEngine,
                 vectorSearchService: vectorSearchService,

@@ -216,6 +216,28 @@ public final class GophyDatabase: Sendable {
             )
         }
 
+        migrator.registerMigration("v15_add_meetingId_to_documents") { db in
+            try db.alter(table: "documents") { t in
+                t.add(column: "meetingId", .text)
+                    .references("meetings", onDelete: .setNull)
+            }
+            try db.create(
+                index: "idx_documents_meetingId",
+                on: "documents",
+                columns: ["meetingId"]
+            )
+        }
+
+        migrator.registerMigration("v16_embedding_metadata") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS embedding_metadata(
+                    dimension INTEGER NOT NULL
+                )
+                """)
+            // Store current dimension (384 from previous migrations)
+            try db.execute(sql: "INSERT INTO embedding_metadata(dimension) VALUES (384)")
+        }
+
         return migrator
     }
 }

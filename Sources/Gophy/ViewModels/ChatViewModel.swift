@@ -24,12 +24,44 @@ public final class ChatViewModel {
     public var isGenerating: Bool = false
     public var errorMessage: String?
 
+    public let meetingId: String?
+    public let documentId: String?
+
     private let ragPipeline: RAGPipeline
     private let chatMessageRepository: ChatMessageRepository
 
-    public init(ragPipeline: RAGPipeline, chatMessageRepository: ChatMessageRepository) {
+    public init(
+        ragPipeline: RAGPipeline,
+        chatMessageRepository: ChatMessageRepository,
+        meetingId: String? = nil,
+        documentId: String? = nil
+    ) {
         self.ragPipeline = ragPipeline
         self.chatMessageRepository = chatMessageRepository
+        self.meetingId = meetingId
+        self.documentId = documentId
+
+        if let meetingId {
+            self.selectedScope = .meeting(id: meetingId)
+        } else if let documentId {
+            self.selectedScope = .document(id: documentId)
+        }
+    }
+
+    public func loadMessages() async {
+        do {
+            let records: [ChatMessageRecord]
+            if let meetingId {
+                records = try await chatMessageRepository.listForMeeting(meetingId: meetingId)
+            } else {
+                records = try await chatMessageRepository.listGlobal()
+            }
+            messages = records.map {
+                ChatMessage(id: $0.id, role: $0.role, content: $0.content, createdAt: $0.createdAt)
+            }
+        } catch {
+            errorMessage = "Failed to load messages: \(error.localizedDescription)"
+        }
     }
 
     public func sendMessage() async {
@@ -50,7 +82,7 @@ public final class ChatViewModel {
             id: userMessage.id,
             role: userMessage.role,
             content: userMessage.content,
-            meetingId: nil,
+            meetingId: meetingId,
             createdAt: userMessage.createdAt
         )
 
@@ -96,7 +128,7 @@ public final class ChatViewModel {
             id: assistantId,
             role: "assistant",
             content: assistantContent,
-            meetingId: nil,
+            meetingId: meetingId,
             createdAt: assistantMessage.createdAt
         )
 

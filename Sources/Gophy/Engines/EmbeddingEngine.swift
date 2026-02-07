@@ -16,6 +16,9 @@ public final class EmbeddingEngine: @unchecked Sendable {
     private let modelRegistry: any ModelRegistryProtocol
     private let crashReporter = CrashReporter.shared
 
+    /// The embedding dimension detected from the model. Available after load().
+    private(set) public var embeddingDimension: Int = 0
+
     public init(modelRegistry: any ModelRegistryProtocol = ModelRegistry.shared) {
         self.modelRegistry = modelRegistry
         crashReporter.logInfo("EmbeddingEngine initialized")
@@ -46,6 +49,11 @@ public final class EmbeddingEngine: @unchecked Sendable {
             }
             isLoaded = true
             logger.info("Embedding engine loaded successfully")
+
+            // Detect embedding dimension with a test embedding
+            let testEmbedding = try await embedRaw(text: "test", mode: .passage)
+            embeddingDimension = testEmbedding.count
+            logger.info("Detected embedding dimension: \(self.embeddingDimension, privacy: .public)")
         } catch {
             logger.error("Failed to load embedding model: \(error.localizedDescription, privacy: .public)")
             throw error
@@ -53,6 +61,10 @@ public final class EmbeddingEngine: @unchecked Sendable {
     }
 
     public func embed(text: String, mode: EmbeddingMode = .passage) async throws -> [Float] {
+        return try await embedRaw(text: text, mode: mode)
+    }
+
+    private func embedRaw(text: String, mode: EmbeddingMode) async throws -> [Float] {
         guard let modelContainer else {
             throw EmbeddingError.modelNotLoaded
         }
@@ -80,7 +92,9 @@ public final class EmbeddingEngine: @unchecked Sendable {
             }
 
             guard !tokens.isEmpty else {
-                return [Float](repeating: 0, count: 384) // Return zero vector for empty
+                // Return zero vector with detected dimension, or 1 as fallback
+                let dim = self.embeddingDimension > 0 ? self.embeddingDimension : 1
+                return [Float](repeating: 0, count: dim)
             }
 
             let inputIds = MLXArray(tokens)
@@ -93,7 +107,16 @@ public final class EmbeddingEngine: @unchecked Sendable {
             let attentionMask = MLXArray.ones(like: batchedInputIds)
 
             let output = model(batchedInputIds, positionIds: nil, tokenTypeIds: tokenTypeIds, attentionMask: attentionMask)
-            let pooled = pooler(output, normalize: true)
+            var pooled = pooler(output, normalize: true)
+
+            // Handle unpooled output: if pooler returns 3D tensor [batch, seq_len, hidden_dim],
+            // take the last token as the embedding (standard for decoder-only models like Qwen3)
+            if pooled.ndim == 3 {
+                logger.info("Pooler returned 3D tensor \(pooled.shape.description, privacy: .public), using last token pooling")
+                pooled = pooled[0..., -1, 0...]
+                // Re-normalize after taking last token
+                pooled = pooled / norm(pooled, axis: -1, keepDims: true)
+            }
 
             eval(pooled)
 
@@ -119,6 +142,7 @@ public final class EmbeddingEngine: @unchecked Sendable {
     public func unload() {
         modelContainer = nil
         isLoaded = false
+        embeddingDimension = 0
     }
 }
 

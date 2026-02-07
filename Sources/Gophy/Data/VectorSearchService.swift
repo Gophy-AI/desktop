@@ -1,5 +1,8 @@
 import Foundation
 import GRDB
+import os
+
+private let vsLogger = Logger(subsystem: "com.gophy.app", category: "VectorSearchService")
 
 public struct VectorSearchResult: Sendable {
     public let id: String
@@ -13,17 +16,81 @@ public struct VectorSearchResult: Sendable {
 
 public final class VectorSearchService: Sendable {
     private let database: GophyDatabase
+    private let _embeddingDimension: Int
 
-    public init(database: GophyDatabase) {
+    public var embeddingDimension: Int { _embeddingDimension }
+
+    /// Initialize with explicit dimension. Use 0 to skip dimension validation (auto-detect on first insert).
+    public init(database: GophyDatabase, embeddingDimension: Int = 0) {
         self.database = database
+        self._embeddingDimension = embeddingDimension
+        vsLogger.info("VectorSearchService initialized with dimension=\(embeddingDimension, privacy: .public)")
     }
 
-    // multilingual-e5-small produces 384-dimensional embeddings
-    private static let embeddingDimension = 384
+    /// Ensure the embeddings virtual table matches the given dimension.
+    /// Recreates the table if the dimension changed.
+    public func ensureDimension(_ dimension: Int) async throws {
+        guard dimension > 0 else { return }
+
+        let currentDim = try await detectTableDimension()
+        if currentDim == dimension {
+            vsLogger.info("Embeddings table dimension matches: \(dimension, privacy: .public)")
+            return
+        }
+
+        vsLogger.info("Dimension mismatch: table=\(currentDim, privacy: .public) model=\(dimension, privacy: .public), recreating table")
+        try await recreateEmbeddingsTable(dimension: dimension)
+    }
+
+    private func detectTableDimension() async throws -> Int {
+        // sqlite-vec tables store dimension in schema; check by inserting/querying or reading metadata
+        // Simplest: try to read the stored dimension from our metadata table
+        return try await database.dbQueue.read { db -> Int in
+            if let dim = try Int.fetchOne(db, sql: "SELECT dimension FROM embedding_metadata LIMIT 1") {
+                return dim
+            }
+            return 0
+        }
+    }
+
+    private func recreateEmbeddingsTable(dimension: Int) async throws {
+        try await database.dbQueue.write { db in
+            // Drop old tables
+            try db.execute(sql: "DROP TABLE IF EXISTS embedding_id_mapping")
+            try db.execute(sql: "DROP TABLE IF EXISTS embeddings")
+
+            // Recreate with new dimension
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE embeddings USING vec0(
+                    embedding FLOAT[\(dimension)]
+                )
+                """)
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS embedding_id_mapping(
+                    rowid INTEGER PRIMARY KEY,
+                    chunk_id TEXT NOT NULL UNIQUE
+                )
+                """)
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS idx_embedding_id_mapping_chunk_id
+                ON embedding_id_mapping(chunk_id)
+                """)
+
+            // Store dimension in metadata
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS embedding_metadata(dimension INTEGER NOT NULL)")
+            try db.execute(sql: "DELETE FROM embedding_metadata")
+            try db.execute(sql: "INSERT INTO embedding_metadata(dimension) VALUES (?)", arguments: [dimension])
+
+            vsLogger.info("Recreated embeddings table with dimension=\(dimension, privacy: .public)")
+        }
+    }
 
     public func insert(id: String, embedding: [Float]) async throws {
-        guard embedding.count == Self.embeddingDimension else {
-            throw VectorSearchError.invalidEmbeddingDimension(expected: Self.embeddingDimension, got: embedding.count)
+        if _embeddingDimension > 0 {
+            guard embedding.count == _embeddingDimension else {
+                throw VectorSearchError.invalidEmbeddingDimension(expected: _embeddingDimension, got: embedding.count)
+            }
         }
 
         let blob = embedding.withUnsafeBytes { Data($0) }
@@ -42,8 +109,10 @@ public final class VectorSearchService: Sendable {
     }
 
     public func search(query: [Float], limit: Int) async throws -> [VectorSearchResult] {
-        guard query.count == Self.embeddingDimension else {
-            throw VectorSearchError.invalidEmbeddingDimension(expected: Self.embeddingDimension, got: query.count)
+        if _embeddingDimension > 0 {
+            guard query.count == _embeddingDimension else {
+                throw VectorSearchError.invalidEmbeddingDimension(expected: _embeddingDimension, got: query.count)
+            }
         }
 
         let queryBlob = query.withUnsafeBytes { Data($0) }

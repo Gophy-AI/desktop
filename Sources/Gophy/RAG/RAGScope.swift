@@ -5,6 +5,7 @@ public enum RAGScope: Sendable, Hashable, Equatable {
     case meetings
     case documents
     case meeting(id: String)
+    case document(id: String)
 
     public var displayName: String {
         switch self {
@@ -16,6 +17,8 @@ public enum RAGScope: Sendable, Hashable, Equatable {
             return "Documents"
         case .meeting(let id):
             return "Meeting: \(id)"
+        case .document(let id):
+            return "Document: \(id)"
         }
     }
 }

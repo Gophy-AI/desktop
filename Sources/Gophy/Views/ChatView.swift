@@ -1,9 +1,32 @@
 import SwiftUI
 
+struct ChatContext: Identifiable {
+    let id: String
+    let title: String
+}
+
 @MainActor
 struct ChatView: View {
+    let meetingId: String?
+    let meetingTitle: String?
+    let documentId: String?
+    let documentName: String?
+
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ChatViewModel?
     @State private var showClearConfirmation: Bool = false
+
+    init(
+        meetingId: String? = nil,
+        meetingTitle: String? = nil,
+        documentId: String? = nil,
+        documentName: String? = nil
+    ) {
+        self.meetingId = meetingId
+        self.meetingTitle = meetingTitle
+        self.documentId = documentId
+        self.documentName = documentName
+    }
 
     var body: some View {
         Group {
@@ -53,25 +76,48 @@ struct ChatView: View {
         }
     }
 
+    private var scopeLabel: String? {
+        if let meetingTitle {
+            return "Meeting: \(meetingTitle)"
+        } else if let documentName {
+            return "Document: \(documentName)"
+        }
+        return nil
+    }
+
+    private var isScoped: Bool {
+        meetingId != nil || documentId != nil
+    }
+
     private func headerView(viewModel: ChatViewModel) -> some View {
         HStack {
-            Text("Chat")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Chat")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                if let label = scopeLabel {
+                    Text(label)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             Spacer()
 
-            Picker("Scope", selection: Binding(
-                get: { viewModel.selectedScope },
-                set: { viewModel.selectedScope = $0 }
-            )) {
-                Text("All").tag(RAGScope.all)
-                Text("Meetings").tag(RAGScope.meetings)
-                Text("Documents").tag(RAGScope.documents)
+            if !isScoped {
+                Picker("Scope", selection: Binding(
+                    get: { viewModel.selectedScope },
+                    set: { viewModel.selectedScope = $0 }
+                )) {
+                    Text("All").tag(RAGScope.all)
+                    Text("Meetings").tag(RAGScope.meetings)
+                    Text("Documents").tag(RAGScope.documents)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 300)
+                .disabled(viewModel.isGenerating)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 300)
-            .disabled(viewModel.isGenerating)
 
             Button(action: {
                 showClearConfirmation = true
@@ -80,6 +126,15 @@ struct ChatView: View {
             }
             .buttonStyle(.bordered)
             .disabled(viewModel.messages.isEmpty || viewModel.isGenerating)
+
+            if isScoped {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding()
     }
@@ -218,10 +273,14 @@ struct ChatView: View {
                 documentRepository: documentRepo
             )
 
-            viewModel = ChatViewModel(
+            let vm = ChatViewModel(
                 ragPipeline: ragPipeline,
-                chatMessageRepository: chatRepo
+                chatMessageRepository: chatRepo,
+                meetingId: meetingId,
+                documentId: documentId
             )
+            await vm.loadMessages()
+            viewModel = vm
         } catch {
             print("Failed to initialize ChatView: \(error)")
         }

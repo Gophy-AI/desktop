@@ -102,11 +102,15 @@ public final class RAGPipeline: Sendable {
 
                     let prompt = "Question: \(question)"
 
+                    let defaults = UserDefaults.standard
+                    let maxTokens = defaults.integer(forKey: "inference.maxTokens")
+                    let temperature = defaults.double(forKey: "inference.temperature")
+
                     let responseStream = textGenProvider.generate(
                         prompt: prompt,
                         systemPrompt: systemPrompt,
-                        maxTokens: 512,
-                        temperature: 0.7
+                        maxTokens: maxTokens > 0 ? maxTokens : 2048,
+                        temperature: temperature > 0 ? temperature : 0.7
                     )
 
                     for try await token in responseStream {
@@ -149,6 +153,16 @@ public final class RAGPipeline: Sendable {
             for result in results {
                 if let segment = try? await meetingRepository.getSegment(id: result.id),
                    segment.meetingId == meetingId {
+                    filtered.append(result)
+                }
+            }
+            return filtered
+
+        case .document(let documentId):
+            var filtered: [VectorSearchResult] = []
+            for result in results {
+                if let chunk = try? await documentRepository.getChunk(id: result.id),
+                   chunk.documentId == documentId {
                     filtered.append(result)
                 }
             }

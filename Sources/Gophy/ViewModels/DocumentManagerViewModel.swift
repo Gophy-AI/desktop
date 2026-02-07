@@ -67,6 +67,15 @@ public final class DocumentManagerViewModel {
         }
     }
 
+    public func unlinkDocument(_ document: DocumentRecord) async {
+        do {
+            try await documentRepository.unlinkDocument(documentId: document.id)
+            await loadDocuments()
+        } catch {
+            errorMessage = "Failed to unlink document: \(error.localizedDescription)"
+        }
+    }
+
     public func typeIcon(for type: String) -> String {
         switch type.lowercased() {
         case "pdf":

@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public struct DocumentRecord: Codable, Sendable {
+public struct DocumentRecord: Codable, Sendable, Identifiable {
     public let id: String
     public let name: String
     public let type: String
@@ -9,6 +9,7 @@ public struct DocumentRecord: Codable, Sendable {
     public let status: String
     public let pageCount: Int
     public let createdAt: Date
+    public let meetingId: String?
 
     public init(
         id: String,
@@ -17,7 +18,8 @@ public struct DocumentRecord: Codable, Sendable {
         path: String,
         status: String,
         pageCount: Int,
-        createdAt: Date
+        createdAt: Date,
+        meetingId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -26,6 +28,7 @@ public struct DocumentRecord: Codable, Sendable {
         self.status = status
         self.pageCount = pageCount
         self.createdAt = createdAt
+        self.meetingId = meetingId
     }
 }
 

@@ -231,43 +231,64 @@ public final class DocumentProcessor: Sendable {
             return []
         }
 
+        // Split text into paragraphs (double newline or single newline with blank line)
+        let paragraphs = text
+            .components(separatedBy: "\n\n")
+            .flatMap { block -> [String] in
+                // Also split on single newlines followed by blank-ish lines
+                block.components(separatedBy: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            }
+
+        guard !paragraphs.isEmpty else { return [] }
+
+        // Merge small paragraphs into chunks up to chunkSize, keeping paragraph boundaries
         var chunks: [DocumentChunkRecord] = []
-        var currentIndex = text.startIndex
+        var currentChunkParts: [String] = []
+        var currentLength = 0
         var chunkIndex = 0
+        var textPosition = 0
 
-        while currentIndex < text.endIndex {
-            let remainingDistance = text.distance(from: currentIndex, to: text.endIndex)
-            let currentChunkSize = min(chunkSize, remainingDistance)
+        for paragraph in paragraphs {
+            let paragraphLength = paragraph.count
 
-            let endIndex = text.index(currentIndex, offsetBy: currentChunkSize, limitedBy: text.endIndex) ?? text.endIndex
-            let chunkText = String(text[currentIndex..<endIndex])
+            // If adding this paragraph exceeds chunkSize and we already have content, flush
+            if currentLength > 0 && currentLength + paragraphLength + 1 > chunkSize {
+                let chunkText = currentChunkParts.joined(separator: "\n\n")
+                let pageNumber = calculatePageNumber(position: textPosition, totalPages: pageCount, pageMap: pageMap)
 
-            let chunkPosition = text.distance(from: text.startIndex, to: currentIndex)
-            let pageNumber = calculatePageNumber(position: chunkPosition, totalPages: pageCount, pageMap: pageMap)
+                chunks.append(DocumentChunkRecord(
+                    id: UUID().uuidString,
+                    documentId: documentId,
+                    content: chunkText,
+                    chunkIndex: chunkIndex,
+                    pageNumber: pageNumber,
+                    createdAt: Date()
+                ))
+                chunkIndex += 1
+                textPosition += chunkText.count
+                currentChunkParts = []
+                currentLength = 0
+            }
 
-            let chunk = DocumentChunkRecord(
+            currentChunkParts.append(paragraph)
+            currentLength += paragraphLength + (currentChunkParts.count > 1 ? 1 : 0)
+        }
+
+        // Flush remaining content
+        if !currentChunkParts.isEmpty {
+            let chunkText = currentChunkParts.joined(separator: "\n\n")
+            let pageNumber = calculatePageNumber(position: textPosition, totalPages: pageCount, pageMap: pageMap)
+
+            chunks.append(DocumentChunkRecord(
                 id: UUID().uuidString,
                 documentId: documentId,
                 content: chunkText,
                 chunkIndex: chunkIndex,
                 pageNumber: pageNumber,
                 createdAt: Date()
-            )
-            chunks.append(chunk)
-
-            if endIndex == text.endIndex {
-                break
-            }
-
-            let overlapSize = min(chunkOverlap, currentChunkSize)
-            let nextStartIndex = text.index(currentIndex, offsetBy: currentChunkSize - overlapSize, limitedBy: text.endIndex) ?? text.endIndex
-
-            if nextStartIndex >= text.endIndex {
-                break
-            }
-
-            currentIndex = nextStartIndex
-            chunkIndex += 1
+            ))
         }
 
         return chunks

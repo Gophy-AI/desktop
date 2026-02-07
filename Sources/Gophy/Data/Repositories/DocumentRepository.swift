@@ -63,4 +63,31 @@ public final class DocumentRepository: Sendable {
             try DocumentChunkRecord.fetchOne(db, key: id)
         }
     }
+
+    public func linkDocument(documentId: String, meetingId: String) async throws {
+        try await database.dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE documents SET meetingId = ? WHERE id = ?",
+                arguments: [meetingId, documentId]
+            )
+        }
+    }
+
+    public func unlinkDocument(documentId: String) async throws {
+        try await database.dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE documents SET meetingId = NULL WHERE id = ?",
+                arguments: [documentId]
+            )
+        }
+    }
+
+    public func fetchDocuments(forMeetingId meetingId: String) async throws -> [DocumentRecord] {
+        try await database.dbQueue.read { db in
+            try DocumentRecord
+                .filter(Column("meetingId") == meetingId)
+                .order(Column("createdAt").desc)
+                .fetchAll(db)
+        }
+    }
 }
