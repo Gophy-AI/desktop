@@ -1,14 +1,17 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.gophy.app", category: "ModelDownloadManager")
 
 public final class ModelDownloadManager: @unchecked Sendable {
-    private let registry: ModelRegistry
+    private let registry: ModelRegistryProtocol
     private let huggingFaceDownloader: ModelDownloaderProtocol
     private let whisperKitDownloader: ModelDownloaderProtocol
     private let downloadTasks: NSLock
     private var activeDownloads: [String: Task<Void, Never>]
 
     public init(
-        registry: ModelRegistry = .shared,
+        registry: ModelRegistryProtocol = ModelRegistry.shared,
         downloader: ModelDownloaderProtocol? = nil,
         whisperKitDownloader: ModelDownloaderProtocol? = nil
     ) {
@@ -28,7 +31,10 @@ public final class ModelDownloadManager: @unchecked Sendable {
     }
 
     public func download(_ model: ModelDefinition) -> AsyncStream<DownloadProgress> {
+        logger.info("Download requested for model: \(model.id), type: \(model.type.rawValue)")
+
         if registry.isDownloaded(model) {
+            logger.info("Model already downloaded, returning completed status")
             return AsyncStream { continuation in
                 continuation.yield(DownloadProgress(
                     model: model,
@@ -40,14 +46,21 @@ public final class ModelDownloadManager: @unchecked Sendable {
             }
         }
 
+        logger.info("Model not downloaded, starting download")
+
         return AsyncStream { continuation in
             let task = Task {
                 let destination = self.registry.downloadPath(for: model)
+                logger.info("Download destination: \(destination.path)")
 
                 do {
                     try self.ensureSufficientDiskSpace(for: model)
+                    logger.info("Disk space check passed")
 
-                    let downloadStream = self.downloader(for: model).download(model: model, to: destination)
+                    let selectedDownloader = self.downloader(for: model)
+                    logger.info("Using downloader: \(type(of: selectedDownloader))")
+
+                    let downloadStream = selectedDownloader.download(model: model, to: destination)
 
                     for await progress in downloadStream {
                         continuation.yield(progress)
@@ -117,7 +130,12 @@ public final class ModelDownloadManager: @unchecked Sendable {
             return
         }
 
-        let requiredBytes = Int64(model.approximateSizeGB * 1_000_000_000)
+        // Skip check if model size is unknown
+        guard let sizeGB = model.approximateSizeGB else {
+            return
+        }
+
+        let requiredBytes = Int64(sizeGB * 1_000_000_000)
         let bufferBytes = Int64(1_000_000_000)
 
         if freeSpace < (requiredBytes + bufferBytes) {

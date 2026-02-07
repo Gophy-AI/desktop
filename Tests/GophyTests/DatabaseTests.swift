@@ -30,7 +30,7 @@ final class DatabaseTests: XCTestCase {
         try dbQueue.read { db in
             let appliedMigrations = try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
 
-            XCTAssertEqual(appliedMigrations.count, 11, "Should have 11 migrations applied")
+            XCTAssertEqual(appliedMigrations.count, 14, "Should have 14 migrations applied")
             XCTAssertTrue(appliedMigrations.contains("v1_create_meetings"), "Should have meetings migration")
             XCTAssertTrue(appliedMigrations.contains("v2_create_transcript_segments"), "Should have transcript_segments migration")
             XCTAssertTrue(appliedMigrations.contains("v3_create_documents"), "Should have documents migration")
@@ -42,6 +42,9 @@ final class DatabaseTests: XCTestCase {
             XCTAssertTrue(appliedMigrations.contains("v9_fix_embedding_dimension"), "Should have fix_embedding_dimension migration")
             XCTAssertTrue(appliedMigrations.contains("v10_reindex_for_multilingual_e5"), "Should have reindex_for_multilingual_e5 migration")
             XCTAssertTrue(appliedMigrations.contains("v11_add_language_to_segments"), "Should have add_language_to_segments migration")
+            XCTAssertTrue(appliedMigrations.contains("v12_recording_metadata"), "Should have recording_metadata migration")
+            XCTAssertTrue(appliedMigrations.contains("v13_add_calendar_fields_to_meetings"), "Should have calendar_fields migration")
+            XCTAssertTrue(appliedMigrations.contains("v14_create_automation_history"), "Should have automation_history migration")
         }
     }
 
@@ -307,7 +310,7 @@ final class DatabaseTests: XCTestCase {
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(firstCount, 11, "First database should have 11 migrations")
+        XCTAssertEqual(firstCount, 14, "First database should have 14 migrations")
 
         let secondDB = try GophyDatabase(storageManager: storageManager)
         let secondDBQueue = secondDB.dbQueue
@@ -316,7 +319,7 @@ final class DatabaseTests: XCTestCase {
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(secondCount, 11, "Second database should still have 11 migrations")
+        XCTAssertEqual(secondCount, 14, "Second database should still have 14 migrations")
     }
 
     func testEmbeddingIdMappingTableCreated() throws {

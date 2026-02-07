@@ -16,7 +16,7 @@ public final class HuggingFaceDownloader: @unchecked Sendable, ModelDownloaderPr
                 do {
                     let hubApi = HubApi(downloadBase: destination.deletingLastPathComponent())
                     let repo = Hub.Repo(id: model.huggingFaceID)
-                    let estimatedTotalBytes = Int64(model.approximateSizeGB * 1_000_000_000)
+                    let estimatedTotalBytes = Int64((model.approximateSizeGB ?? 1.0) * 1_000_000_000)
 
                     var lastProgress: Double = 0
 

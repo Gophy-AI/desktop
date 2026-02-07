@@ -133,29 +133,29 @@ final class ModelRegistryTests: XCTestCase {
             XCTFail("STT model not found")
             return
         }
-        XCTAssertEqual(sttModel.approximateSizeGB, 1.5, accuracy: 0.1)
-        XCTAssertEqual(sttModel.memoryUsageGB, 1.5, accuracy: 0.1)
+        XCTAssertEqual(sttModel.approximateSizeGB ?? 0, 1.5, accuracy: 0.1)
+        XCTAssertEqual(sttModel.memoryUsageGB ?? 0, 1.5, accuracy: 0.1)
 
         guard let textGenModel = models.first(where: { $0.type == .textGen }) else {
             XCTFail("TextGen model not found")
             return
         }
-        XCTAssertEqual(textGenModel.approximateSizeGB, 4.0, accuracy: 0.1)
-        XCTAssertEqual(textGenModel.memoryUsageGB, 4.0, accuracy: 0.1)
+        XCTAssertEqual(textGenModel.approximateSizeGB ?? 0, 4.0, accuracy: 0.1)
+        XCTAssertEqual(textGenModel.memoryUsageGB ?? 0, 4.0, accuracy: 0.1)
 
         guard let ocrModel = models.first(where: { $0.type == .ocr }) else {
             XCTFail("OCR model not found")
             return
         }
-        XCTAssertEqual(ocrModel.approximateSizeGB, 5.3, accuracy: 0.1)
-        XCTAssertEqual(ocrModel.memoryUsageGB, 5.5, accuracy: 0.1)
+        XCTAssertEqual(ocrModel.approximateSizeGB ?? 0, 5.3, accuracy: 0.1)
+        XCTAssertEqual(ocrModel.memoryUsageGB ?? 0, 5.5, accuracy: 0.1)
 
         guard let embeddingModel = models.first(where: { $0.type == .embedding }) else {
             XCTFail("Embedding model not found")
             return
         }
-        XCTAssertEqual(embeddingModel.approximateSizeGB, 0.47, accuracy: 0.05)
-        XCTAssertEqual(embeddingModel.memoryUsageGB, 0.5, accuracy: 0.05)
+        XCTAssertEqual(embeddingModel.approximateSizeGB ?? 0, 0.47, accuracy: 0.05)
+        XCTAssertEqual(embeddingModel.memoryUsageGB ?? 0, 0.5, accuracy: 0.05)
     }
 
     func testModelDefinitionsHaveDisplayNames() throws {

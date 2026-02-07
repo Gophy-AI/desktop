@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class ModelManagerViewModel {
-    private let registry: ModelRegistry
+    private let registry: ModelRegistryProtocol
     private let downloadManager: ModelDownloadManager
     private let storageManager: StorageManager
 
@@ -12,11 +12,14 @@ final class ModelManagerViewModel {
     var downloadProgress: [String: DownloadProgress] = [:]
     var totalDiskUsageGB: Double = 0.0
     var errorMessage: String?
+    var searchQuery: String = ""
+    var selectedTypeFilter: ModelType?
 
     private var downloadTasks: [String: Task<Void, Never>] = [:]
+    private var allModels: [ModelDefinition] = []
 
     init(
-        registry: ModelRegistry = .shared,
+        registry: ModelRegistryProtocol = ModelRegistry.shared,
         downloadManager: ModelDownloadManager = ModelDownloadManager(),
         storageManager: StorageManager = .shared
     ) {
@@ -29,7 +32,42 @@ final class ModelManagerViewModel {
     }
 
     func loadModels() {
-        models = registry.availableModels()
+        allModels = registry.availableModels()
+        applyFilters()
+    }
+
+    func applyFilters() {
+        var filtered = allModels
+
+        // Apply search query
+        if !searchQuery.isEmpty {
+            if let dynamicRegistry = registry as? DynamicModelRegistry {
+                filtered = dynamicRegistry.search(query: searchQuery)
+            } else {
+                let lowercaseQuery = searchQuery.lowercased()
+                filtered = filtered.filter { model in
+                    model.name.lowercased().contains(lowercaseQuery) ||
+                    model.huggingFaceID.lowercased().contains(lowercaseQuery)
+                }
+            }
+        }
+
+        // Apply type filter
+        if let typeFilter = selectedTypeFilter {
+            filtered = filtered.filter { $0.type == typeFilter }
+        }
+
+        models = filtered
+    }
+
+    func updateSearchQuery(_ query: String) {
+        searchQuery = query
+        applyFilters()
+    }
+
+    func updateTypeFilter(_ type: ModelType?) {
+        selectedTypeFilter = type
+        applyFilters()
     }
 
     func isDownloaded(_ model: ModelDefinition) -> Bool {

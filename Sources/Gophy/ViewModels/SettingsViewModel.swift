@@ -20,7 +20,7 @@ public struct ShortcutInfo: Sendable {
 public final class SettingsViewModel {
     private let audioDeviceManager: AudioDeviceManager
     private let storageManager: StorageManager
-    private let registry: ModelRegistry
+    private let registry: ModelRegistryProtocol
     private var authService: GoogleAuthService?
     private var calendarSyncService: (any CalendarSyncServiceProtocol)?
     private var eventKitService: (any EventKitServiceProtocol)?
@@ -39,6 +39,9 @@ public final class SettingsViewModel {
     var languagePreference: AppLanguage = .auto
 
     var selectedTextGenModelId: String = "qwen2.5-7b-instruct-4bit"
+    var selectedSTTModelId: String = "whisperkit-large-v3-turbo"
+    var selectedOCRModelId: String = "qwen2.5-vl-7b-instruct-4bit"
+    var selectedEmbeddingModelId: String = "multilingual-e5-small"
 
     var showClearDataConfirmation: Bool = false
     var errorMessage: String?
@@ -88,7 +91,7 @@ public final class SettingsViewModel {
     init(
         audioDeviceManager: AudioDeviceManager,
         storageManager: StorageManager,
-        registry: ModelRegistry,
+        registry: ModelRegistryProtocol,
         authService: GoogleAuthService? = nil,
         calendarSyncService: (any CalendarSyncServiceProtocol)? = nil,
         eventKitService: (any EventKitServiceProtocol)? = nil
@@ -139,6 +142,18 @@ public final class SettingsViewModel {
 
         if let savedTextGenModel = defaults.string(forKey: "selectedTextGenModelId") {
             selectedTextGenModelId = savedTextGenModel
+        }
+
+        if let savedSTTModel = defaults.string(forKey: "selectedSTTModelId") {
+            selectedSTTModelId = savedSTTModel
+        }
+
+        if let savedOCRModel = defaults.string(forKey: "selectedOCRModelId") {
+            selectedOCRModelId = savedOCRModel
+        }
+
+        if let savedEmbeddingModel = defaults.string(forKey: "selectedEmbeddingModelId") {
+            selectedEmbeddingModelId = savedEmbeddingModel
         }
     }
 
@@ -201,8 +216,38 @@ public final class SettingsViewModel {
         defaults.set(modelId, forKey: "selectedTextGenModelId")
     }
 
+    func updateSelectedSTTModel(_ modelId: String) {
+        selectedSTTModelId = modelId
+        let defaults = UserDefaults.standard
+        defaults.set(modelId, forKey: "selectedSTTModelId")
+    }
+
+    func updateSelectedOCRModel(_ modelId: String) {
+        selectedOCRModelId = modelId
+        let defaults = UserDefaults.standard
+        defaults.set(modelId, forKey: "selectedOCRModelId")
+    }
+
+    func updateSelectedEmbeddingModel(_ modelId: String) {
+        selectedEmbeddingModelId = modelId
+        let defaults = UserDefaults.standard
+        defaults.set(modelId, forKey: "selectedEmbeddingModelId")
+    }
+
     var availableTextGenModels: [ModelDefinition] {
         registry.availableModels().filter { $0.type == .textGen }
+    }
+
+    var availableSTTModels: [ModelDefinition] {
+        registry.availableModels().filter { $0.type == .stt }
+    }
+
+    var availableOCRModels: [ModelDefinition] {
+        registry.availableModels().filter { $0.type == .ocr }
+    }
+
+    var availableEmbeddingModels: [ModelDefinition] {
+        registry.availableModels().filter { $0.type == .embedding }
     }
 
     func openDatabaseInFinder() {
@@ -565,5 +610,10 @@ public final class SettingsViewModel {
         case .unavailable(let msg):
             return TestConnectionResult(isHealthy: false, message: msg)
         }
+    }
+
+    func isCloudProvider(for capability: ProviderCapability) -> Bool {
+        guard let registry = providerRegistry else { return false }
+        return registry.isCloudProvider(for: capability)
     }
 }

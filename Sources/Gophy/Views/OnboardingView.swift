@@ -30,10 +30,8 @@ struct OnboardingView: View {
             LanguageStep(viewModel: viewModel)
         case .calendar:
             CalendarOnboardingStep(viewModel: viewModel)
-        case .models:
-            ModelsStep(viewModel: viewModel)
-        case .cloudProviders:
-            CloudProvidersOnboardingStep()
+        case .modelSetup:
+            ModelSetupStep(viewModel: viewModel)
         case .done:
             DoneStep(onComplete: {
                 viewModel.completeOnboarding()
@@ -274,7 +272,7 @@ struct LanguageStep: View {
     }
 }
 
-struct ModelsStep: View {
+struct ModelSetupStep: View {
     @Bindable var viewModel: OnboardingViewModel
 
     var body: some View {
@@ -284,60 +282,214 @@ struct ModelsStep: View {
                     .font(.system(size: 64))
                     .foregroundStyle(.blue)
 
-                Text("Download Models")
+                Text("Configure AI Models")
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Download at least one model to enable Gophy's features")
+                Text("Choose local (on-device) or cloud AI for each capability")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
-            if !viewModel.hasDownloadedModels {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Speech-to-Text
+                    CapabilityRow(
+                        title: "Speech-to-Text",
+                        icon: "mic.fill",
+                        choice: $viewModel.sttChoice,
+                        recommendedModel: viewModel.models.first(where: { $0.type == .stt }),
+                        isDownloaded: viewModel.models.first(where: { $0.type == .stt }).map { viewModel.isDownloaded($0) } ?? false,
+                        isDownloading: viewModel.models.first(where: { $0.type == .stt }).map { viewModel.isDownloading($0) } ?? false,
+                        progress: viewModel.models.first(where: { $0.type == .stt }).flatMap { viewModel.downloadProgress(for: $0) },
+                        onDownload: {
+                            if let model = viewModel.models.first(where: { $0.type == .stt }) {
+                                viewModel.downloadModel(model)
+                            }
+                        },
+                        onCancel: {
+                            if let model = viewModel.models.first(where: { $0.type == .stt }) {
+                                viewModel.cancelDownload(model)
+                            }
+                        }
+                    )
+
+                    // Text Generation
+                    CapabilityRow(
+                        title: "Text Generation",
+                        icon: "text.bubble",
+                        choice: $viewModel.textGenChoice,
+                        recommendedModel: viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }),
+                        isDownloaded: viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }).map { viewModel.isDownloaded($0) } ?? false,
+                        isDownloading: viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }).map { viewModel.isDownloading($0) } ?? false,
+                        progress: viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }).flatMap { viewModel.downloadProgress(for: $0) },
+                        onDownload: {
+                            if let model = viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }) {
+                                viewModel.downloadModel(model)
+                            }
+                        },
+                        onCancel: {
+                            if let model = viewModel.models.first(where: { $0.id == "qwen2.5-7b-instruct-4bit" }) {
+                                viewModel.cancelDownload(model)
+                            }
+                        }
+                    )
+
+                    // Vision/OCR
+                    CapabilityRow(
+                        title: "Vision & OCR",
+                        icon: "doc.viewfinder",
+                        choice: $viewModel.visionChoice,
+                        recommendedModel: viewModel.models.first(where: { $0.type == .ocr }),
+                        isDownloaded: viewModel.models.first(where: { $0.type == .ocr }).map { viewModel.isDownloaded($0) } ?? false,
+                        isDownloading: viewModel.models.first(where: { $0.type == .ocr }).map { viewModel.isDownloading($0) } ?? false,
+                        progress: viewModel.models.first(where: { $0.type == .ocr }).flatMap { viewModel.downloadProgress(for: $0) },
+                        onDownload: {
+                            if let model = viewModel.models.first(where: { $0.type == .ocr }) {
+                                viewModel.downloadModel(model)
+                            }
+                        },
+                        onCancel: {
+                            if let model = viewModel.models.first(where: { $0.type == .ocr }) {
+                                viewModel.cancelDownload(model)
+                            }
+                        }
+                    )
+
+                    // Embeddings
+                    CapabilityRow(
+                        title: "Embeddings",
+                        icon: "circle.grid.3x3",
+                        choice: $viewModel.embeddingChoice,
+                        recommendedModel: viewModel.models.first(where: { $0.type == .embedding }),
+                        isDownloaded: viewModel.models.first(where: { $0.type == .embedding }).map { viewModel.isDownloaded($0) } ?? false,
+                        isDownloading: viewModel.models.first(where: { $0.type == .embedding }).map { viewModel.isDownloading($0) } ?? false,
+                        progress: viewModel.models.first(where: { $0.type == .embedding }).flatMap { viewModel.downloadProgress(for: $0) },
+                        onDownload: {
+                            if let model = viewModel.models.first(where: { $0.type == .embedding }) {
+                                viewModel.downloadModel(model)
+                            }
+                        },
+                        onCancel: {
+                            if let model = viewModel.models.first(where: { $0.type == .embedding }) {
+                                viewModel.cancelDownload(model)
+                            }
+                        }
+                    )
+                }
+            }
+            .frame(maxHeight: 300)
+
+            if !viewModel.canProceed(from: .modelSetup) && viewModel.sttChoice == .local {
                 HStack(spacing: 12) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.orange)
 
-                    Text("Download the Speech-to-Text model to get started with transcription")
+                    Text("Download the Speech-to-Text model or select Cloud to proceed")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .padding()
-                .background(Color.blue.opacity(0.1))
+                .background(Color.orange.opacity(0.1))
                 .cornerRadius(8)
             }
+        }
+    }
+}
 
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(viewModel.models) { model in
-                        OnboardingModelRow(
-                            model: model,
-                            isDownloaded: viewModel.isDownloaded(model),
-                            isDownloading: viewModel.isDownloading(model),
-                            progress: viewModel.downloadProgress(for: model),
-                            onDownload: { viewModel.downloadModel(model) },
-                            onCancel: { viewModel.cancelDownload(model) }
-                        )
-                    }
-                }
+struct CapabilityRow: View {
+    let title: String
+    let icon: String
+    @Binding var choice: OnboardingViewModel.ProviderChoice
+    let recommendedModel: ModelDefinition?
+    let isDownloaded: Bool
+    let isDownloading: Bool
+    let progress: DownloadProgress?
+    let onDownload: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                    .foregroundStyle(.blue)
+                    .frame(width: 30)
+
+                Text(title)
+                    .font(.headline)
+
+                Spacer()
             }
-            .frame(maxHeight: 250)
 
-            if viewModel.totalModelDiskUsage > 0 {
-                HStack {
-                    Text("Total disk usage:")
-                        .font(.subheadline)
+            Picker("", selection: $choice) {
+                Text("Local (On-Device)").tag(OnboardingViewModel.ProviderChoice.local)
+                Text("Cloud Provider").tag(OnboardingViewModel.ProviderChoice.cloud)
+            }
+            .pickerStyle(.segmented)
+
+            if choice == .local {
+                if let model = recommendedModel {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(model.name)
+                                .font(.subheadline)
+
+                            Spacer()
+
+                            if isDownloading {
+                                Button("Cancel") {
+                                    onCancel()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            } else if isDownloaded {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                    Text("Ready")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Button("Download") {
+                                    onDownload()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                            }
+                        }
+
+                        if let progress = progress, isDownloading {
+                            SwiftUI.ProgressView(value: progress.fractionCompleted) {
+                                Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .progressViewStyle(.linear)
+                        }
+                    }
+                } else {
+                    Text("No recommended model available")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundStyle(.blue)
+                        .font(.caption)
 
-                    Spacer()
-
-                    Text(String(format: "%.2f GB", viewModel.totalModelDiskUsage))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                    Text("Configure cloud provider in Settings after setup")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
+        .padding()
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
     }
 }
 
@@ -356,9 +508,15 @@ struct OnboardingModelRow: View {
                     Text(model.name)
                         .font(.headline)
 
-                    Text("\(model.type.displayName) • \(String(format: "%.1f GB", model.approximateSizeGB))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let size = model.approximateSizeGB {
+                        Text("\(model.type.displayName) • \(String(format: "%.1f GB", size))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("\(model.type.displayName) • Size unknown")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -477,61 +635,6 @@ struct CalendarOnboardingStep: View {
     }
 }
 
-struct CloudProvidersOnboardingStep: View {
-    var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "cloud.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.blue)
-
-            Text("Cloud AI Providers")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            Text("Optionally use cloud AI providers like OpenAI, Anthropic, or Google Gemini for higher-quality transcription, suggestions, and more.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-
-            VStack(alignment: .leading, spacing: 12) {
-                FeatureRow(
-                    icon: "bolt.fill",
-                    title: "Faster Processing",
-                    description: "Cloud providers can be faster than on-device models"
-                )
-                FeatureRow(
-                    icon: "sparkles",
-                    title: "More Capable Models",
-                    description: "Access GPT-4o, Claude, Gemini, and more"
-                )
-                FeatureRow(
-                    icon: "lock.shield.fill",
-                    title: "Your API Keys",
-                    description: "Keys are stored securely in macOS Keychain"
-                )
-            }
-            .frame(maxWidth: 400)
-
-            HStack(spacing: 12) {
-                Image(systemName: "info.circle.fill")
-                    .foregroundStyle(.blue)
-
-                Text("You can configure cloud providers anytime in Settings > AI Providers")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(8)
-            .frame(maxWidth: 400)
-
-            Spacer()
-        }
-    }
-}
 
 struct DoneStep: View {
     let onComplete: () -> Void

@@ -20,10 +20,11 @@ public final class WhisperKitDownloader: @unchecked Sendable, ModelDownloaderPro
             Task {
                 do {
                     logger.info("Emitting initial downloading status")
+                    let estimatedTotalBytes = Int64((model.approximateSizeGB ?? 1.5) * 1_000_000_000)
                     continuation.yield(DownloadProgress(
                         model: model,
                         bytesDownloaded: 0,
-                        totalBytes: Int64(model.approximateSizeGB * 1_000_000_000),
+                        totalBytes: estimatedTotalBytes,
                         status: .downloading
                     ))
 
@@ -33,14 +34,24 @@ public final class WhisperKitDownloader: @unchecked Sendable, ModelDownloaderPro
 
                     logger.info("Calling WhisperKit.download(variant: \(modelVariant, privacy: .public), downloadBase: \(downloadBase.path, privacy: .public))")
 
-                    // Download using WhisperKit's built-in download mechanism
+                    // Download using WhisperKit's built-in download mechanism with progress callback
                     let downloadedURL = try await WhisperKit.download(
                         variant: modelVariant,
                         downloadBase: downloadBase,
-                        useBackgroundSession: false
+                        useBackgroundSession: false,
+                        progressCallback: { progress in
+                            let downloadedBytes = Int64(Double(estimatedTotalBytes) * progress.fractionCompleted)
+                            logger.info("Download progress: \(Int(progress.fractionCompleted * 100), privacy: .public)%")
+                            continuation.yield(DownloadProgress(
+                                model: model,
+                                bytesDownloaded: downloadedBytes,
+                                totalBytes: estimatedTotalBytes,
+                                status: .downloading
+                            ))
+                        }
                     )
 
-                    logger.info("WhisperKit.download completed, downloadedURL: \(downloadedURL.path)")
+                    logger.info("WhisperKit.download completed, downloadedURL: \(downloadedURL.path, privacy: .public)")
 
                     if self.isCancelledCheck() {
                         try? FileManager.default.removeItem(at: downloadedURL)
@@ -64,8 +75,8 @@ public final class WhisperKitDownloader: @unchecked Sendable, ModelDownloaderPro
                     logger.info("Download completed successfully")
                     continuation.yield(DownloadProgress(
                         model: model,
-                        bytesDownloaded: Int64(model.approximateSizeGB * 1_000_000_000),
-                        totalBytes: Int64(model.approximateSizeGB * 1_000_000_000),
+                        bytesDownloaded: Int64((model.approximateSizeGB ?? 1.5) * 1_000_000_000),
+                        totalBytes: Int64((model.approximateSizeGB ?? 1.5) * 1_000_000_000),
                         status: .completed
                     ))
                     continuation.finish()

@@ -5,7 +5,7 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel(
         audioDeviceManager: AudioDeviceManager(),
         storageManager: .shared,
-        registry: .shared
+        registry: ModelRegistry.shared
     )
 
     var body: some View {
@@ -142,20 +142,114 @@ struct SettingsView: View {
 
             Divider()
 
+            // STT Model Picker
             VStack(alignment: .leading, spacing: 8) {
-                Picker("Text Generation Model", selection: $viewModel.selectedTextGenModelId) {
-                    ForEach(viewModel.availableTextGenModels, id: \.id) { model in
-                        Text(model.name).tag(model.id)
+                if viewModel.isCloudProvider(for: .speechToText) {
+                    HStack {
+                        Text("Speech-to-Text Model")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Using cloud: \(viewModel.selectedProviderIdFor(.speechToText))")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                } else {
+                    Picker("Speech-to-Text Model", selection: $viewModel.selectedSTTModelId) {
+                        ForEach(viewModel.availableSTTModels, id: \.id) { model in
+                            Text(model.name).tag(model.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.selectedSTTModelId) { _, newValue in
+                        viewModel.updateSelectedSTTModel(newValue)
                     }
                 }
-                .pickerStyle(.menu)
-                .onChange(of: viewModel.selectedTextGenModelId) { _, newValue in
-                    viewModel.updateSelectedTextGenModel(newValue)
-                }
+            }
 
-                Text("Qwen3 supports 119 languages (vs 29 for Qwen2.5) and improved benchmarks. Requires ~4.5 GB.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Divider()
+
+            // Text Generation Model Picker
+            VStack(alignment: .leading, spacing: 8) {
+                if viewModel.isCloudProvider(for: .textGeneration) {
+                    HStack {
+                        Text("Text Generation Model")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Using cloud: \(viewModel.selectedProviderIdFor(.textGeneration))")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                } else {
+                    Picker("Text Generation Model", selection: $viewModel.selectedTextGenModelId) {
+                        ForEach(viewModel.availableTextGenModels, id: \.id) { model in
+                            Text(model.name).tag(model.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.selectedTextGenModelId) { _, newValue in
+                        viewModel.updateSelectedTextGenModel(newValue)
+                    }
+
+                    Text("Qwen3 supports 119 languages (vs 29 for Qwen2.5) and improved benchmarks. Requires ~4.5 GB.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            // OCR/Vision Model Picker
+            VStack(alignment: .leading, spacing: 8) {
+                if viewModel.isCloudProvider(for: .vision) {
+                    HStack {
+                        Text("OCR/Vision Model")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Using cloud: \(viewModel.selectedProviderIdFor(.vision))")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                } else {
+                    Picker("OCR/Vision Model", selection: $viewModel.selectedOCRModelId) {
+                        ForEach(viewModel.availableOCRModels, id: \.id) { model in
+                            Text(model.name).tag(model.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.selectedOCRModelId) { _, newValue in
+                        viewModel.updateSelectedOCRModel(newValue)
+                    }
+                }
+            }
+
+            Divider()
+
+            // Embedding Model Picker
+            VStack(alignment: .leading, spacing: 8) {
+                if viewModel.isCloudProvider(for: .embedding) {
+                    HStack {
+                        Text("Embedding Model")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Using cloud: \(viewModel.selectedProviderIdFor(.embedding))")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
+                } else {
+                    Picker("Embedding Model", selection: $viewModel.selectedEmbeddingModelId) {
+                        ForEach(viewModel.availableEmbeddingModels, id: \.id) { model in
+                            Text(model.name).tag(model.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.selectedEmbeddingModelId) { _, newValue in
+                        viewModel.updateSelectedEmbeddingModel(newValue)
+                    }
+                }
             }
 
             Divider()

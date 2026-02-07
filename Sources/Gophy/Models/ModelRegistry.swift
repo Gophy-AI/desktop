@@ -10,7 +10,7 @@ public protocol ModelRegistryProtocol: Sendable {
 }
 
 public final class ModelRegistry: ModelRegistryProtocol, Sendable {
-    public static let shared = ModelRegistry()
+    public static let shared: ModelRegistryProtocol = DynamicModelRegistry()
 
     private let storageManager: StorageManager
 

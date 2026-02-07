@@ -12,9 +12,13 @@ final class OnboardingViewModel {
         case permissions = 1
         case language = 2
         case calendar = 3
-        case models = 4
-        case cloudProviders = 5
-        case done = 6
+        case modelSetup = 4
+        case done = 5
+    }
+
+    enum ProviderChoice {
+        case local
+        case cloud
     }
 
     var currentStep: OnboardingStep = .welcome
@@ -25,6 +29,12 @@ final class OnboardingViewModel {
     var isConnectingCalendar: Bool = false
     var calendarSkipped: Bool = false
     var eventKitGranted: Bool = false
+
+    // Per-capability provider choices
+    var sttChoice: ProviderChoice = .local
+    var textGenChoice: ProviderChoice = .local
+    var visionChoice: ProviderChoice = .local
+    var embeddingChoice: ProviderChoice = .local
 
     private let modelManagerViewModel: ModelManagerViewModel
 
@@ -112,17 +122,50 @@ final class OnboardingViewModel {
             return true
         case .calendar:
             return true
-        case .models:
-            return hasDownloadedModels
-        case .cloudProviders:
-            return true
+        case .modelSetup:
+            // Require at least STT to be configured (either local model downloaded OR cloud selected)
+            if sttChoice == .local {
+                // Check if at least one STT model is downloaded
+                let sttModels = models.filter { $0.type == .stt }
+                return sttModels.contains { isDownloaded($0) }
+            } else {
+                // Cloud chosen, can proceed (will configure in settings)
+                return true
+            }
         case .done:
             return true
         }
     }
 
     func completeOnboarding() {
-        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        // Persist provider choices to UserDefaults (matching ProviderRegistry keys)
+        let defaults = UserDefaults.standard
+
+        if sttChoice == .cloud {
+            defaults.set("cloud", forKey: "selectedSTTProvider")
+        } else {
+            defaults.set("local", forKey: "selectedSTTProvider")
+        }
+
+        if textGenChoice == .cloud {
+            defaults.set("cloud", forKey: "selectedTextGenProvider")
+        } else {
+            defaults.set("local", forKey: "selectedTextGenProvider")
+        }
+
+        if visionChoice == .cloud {
+            defaults.set("cloud", forKey: "selectedVisionProvider")
+        } else {
+            defaults.set("local", forKey: "selectedVisionProvider")
+        }
+
+        if embeddingChoice == .cloud {
+            defaults.set("cloud", forKey: "selectedEmbeddingProvider")
+        } else {
+            defaults.set("local", forKey: "selectedEmbeddingProvider")
+        }
+
+        defaults.set(true, forKey: "hasCompletedOnboarding")
     }
 
     static func hasCompletedOnboarding() -> Bool {

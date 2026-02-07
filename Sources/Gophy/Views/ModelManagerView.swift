@@ -17,6 +17,31 @@ struct ModelManagerView: View {
 
             Divider()
 
+            // Search and filter bar
+            VStack(spacing: 12) {
+                TextField("Search models...", text: $viewModel.searchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: viewModel.searchQuery) { _, newValue in
+                        viewModel.updateSearchQuery(newValue)
+                    }
+
+                Picker("Filter by type", selection: $viewModel.selectedTypeFilter) {
+                    Text("All Types").tag(nil as ModelType?)
+                    Text("Speech-to-Text").tag(ModelType.stt as ModelType?)
+                    Text("Text Generation").tag(ModelType.textGen as ModelType?)
+                    Text("OCR & Vision").tag(ModelType.ocr as ModelType?)
+                    Text("Embeddings").tag(ModelType.embedding as ModelType?)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: viewModel.selectedTypeFilter) { _, newValue in
+                    viewModel.updateTypeFilter(newValue)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+
+            Divider()
+
             if let errorMessage = viewModel.errorMessage {
                 ErrorBanner(message: errorMessage)
                     .padding()
@@ -145,9 +170,15 @@ struct ModelRow: View {
                         Text("•")
                             .foregroundStyle(.secondary)
 
-                        Text(String(format: "%.1f GB", model.approximateSizeGB))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if let size = model.approximateSizeGB {
+                            Text(String(format: "%.1f GB", size))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Size unknown")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
