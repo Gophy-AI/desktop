@@ -15,12 +15,14 @@ let package = Package(
     dependencies: [
         // Local copy with Swift 6 fix (removed `consuming` keyword in LoRAContainer.swift)
         .package(path: "vendor/mlx-swift-lm"),
+        .package(path: "vendor/mlx-audio-swift"),
         .package(url: "https://github.com/argmaxinc/WhisperKit", from: "0.9.0"),
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
         .package(url: "https://github.com/google/GTMAppAuth", from: "5.0.0"),
         .package(url: "https://github.com/openid/AppAuth-iOS.git", from: "2.0.0"),
         .package(url: "https://github.com/MacPaw/OpenAI", from: "0.4.0"),
-        .package(url: "https://github.com/jamesrochabrun/SwiftAnthropic", from: "1.0.0")
+        .package(url: "https://github.com/jamesrochabrun/SwiftAnthropic", from: "1.0.0"),
+        .package(url: "https://github.com/dmrschmidt/DSWaveformImage", from: "14.0.0")
     ],
     targets: [
         .target(
@@ -45,7 +47,12 @@ let package = Package(
                 .product(name: "GTMAppAuth", package: "GTMAppAuth"),
                 .product(name: "AppAuth", package: "AppAuth-iOS"),
                 .product(name: "OpenAI", package: "OpenAI"),
-                .product(name: "SwiftAnthropic", package: "SwiftAnthropic")
+                .product(name: "SwiftAnthropic", package: "SwiftAnthropic"),
+                .product(name: "DSWaveformImage", package: "DSWaveformImage"),
+                .product(name: "DSWaveformImageViews", package: "DSWaveformImage"),
+                .product(name: "MLXAudioTTS", package: "mlx-audio-swift"),
+                .product(name: "MLXAudioCore", package: "mlx-audio-swift"),
+                .product(name: "MLXAudioCodecs", package: "mlx-audio-swift")
             ],
             exclude: [
                 "Gophy.entitlements",
