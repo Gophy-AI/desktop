@@ -25,12 +25,12 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testFreshDatabaseRunsAllMigrations() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         try dbQueue.read { db in
             let appliedMigrations = try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
 
-            XCTAssertEqual(appliedMigrations.count, 8, "Should have 8 migrations applied")
+            XCTAssertEqual(appliedMigrations.count, 11, "Should have 11 migrations applied")
             XCTAssertTrue(appliedMigrations.contains("v1_create_meetings"), "Should have meetings migration")
             XCTAssertTrue(appliedMigrations.contains("v2_create_transcript_segments"), "Should have transcript_segments migration")
             XCTAssertTrue(appliedMigrations.contains("v3_create_documents"), "Should have documents migration")
@@ -39,11 +39,14 @@ final class DatabaseTests: XCTestCase {
             XCTAssertTrue(appliedMigrations.contains("v6_create_settings"), "Should have settings migration")
             XCTAssertTrue(appliedMigrations.contains("v7_create_embeddings"), "Should have embeddings migration")
             XCTAssertTrue(appliedMigrations.contains("v8_create_embedding_id_mapping"), "Should have embedding_id_mapping migration")
+            XCTAssertTrue(appliedMigrations.contains("v9_fix_embedding_dimension"), "Should have fix_embedding_dimension migration")
+            XCTAssertTrue(appliedMigrations.contains("v10_reindex_for_multilingual_e5"), "Should have reindex_for_multilingual_e5 migration")
+            XCTAssertTrue(appliedMigrations.contains("v11_add_language_to_segments"), "Should have add_language_to_segments migration")
         }
     }
 
     func testWALModeEnabled() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         try dbQueue.read { db in
             let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
@@ -52,7 +55,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchMeeting() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let meeting = MeetingRecord(
             id: UUID().uuidString,
@@ -80,7 +83,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchTranscriptSegment() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let meetingId = UUID().uuidString
         let meeting = MeetingRecord(
@@ -122,7 +125,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchDocument() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let document = DocumentRecord(
             id: UUID().uuidString,
@@ -152,7 +155,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchDocumentChunk() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let documentId = UUID().uuidString
         let document = DocumentRecord(
@@ -192,7 +195,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchChatMessage() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let message = ChatMessageRecord(
             id: UUID().uuidString,
@@ -218,7 +221,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchChatMessageWithMeeting() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let meetingId = UUID().uuidString
         let meeting = MeetingRecord(
@@ -253,7 +256,7 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testInsertAndFetchSettings() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         let setting = SettingRecord(key: "theme", value: "dark")
 
@@ -271,10 +274,10 @@ final class DatabaseTests: XCTestCase {
     }
 
     func testSQLiteVecVirtualTableRespondsToQueries() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         try dbQueue.write { db in
-            let embedding = [Float](repeating: 0.5, count: 768)
+            let embedding = [Float](repeating: 0.5, count: 384)
             let blob = Data(bytes: embedding, count: embedding.count * MemoryLayout<Float>.size)
 
             try db.execute(
@@ -298,26 +301,26 @@ final class DatabaseTests: XCTestCase {
 
     func testRunningMigrationsTwiceDoesNotError() throws {
         let firstDB = try GophyDatabase(storageManager: storageManager)
-        let firstDBQueue = try firstDB.dbQueue
+        let firstDBQueue = firstDB.dbQueue
 
         let firstCount = try firstDBQueue.read { db in
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(firstCount, 8, "First database should have 8 migrations")
+        XCTAssertEqual(firstCount, 11, "First database should have 11 migrations")
 
         let secondDB = try GophyDatabase(storageManager: storageManager)
-        let secondDBQueue = try secondDB.dbQueue
+        let secondDBQueue = secondDB.dbQueue
 
         let secondCount = try secondDBQueue.read { db in
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations").count
         }
 
-        XCTAssertEqual(secondCount, 8, "Second database should still have 8 migrations")
+        XCTAssertEqual(secondCount, 11, "Second database should still have 11 migrations")
     }
 
     func testEmbeddingIdMappingTableCreated() throws {
-        let dbQueue = try database.dbQueue
+        let dbQueue = database.dbQueue
 
         try dbQueue.read { db in
             let tableExists = try Bool.fetchOne(

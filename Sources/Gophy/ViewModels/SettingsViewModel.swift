@@ -19,6 +19,10 @@ public final class SettingsViewModel {
     var totalStorageGB: Double = 0.0
     var totalModelStorageGB: Double = 0.0
 
+    var languagePreference: AppLanguage = .auto
+
+    var selectedTextGenModelId: String = "qwen2.5-7b-instruct-4bit"
+
     var showClearDataConfirmation: Bool = false
     var errorMessage: String?
 
@@ -61,6 +65,15 @@ public final class SettingsViewModel {
         autoSuggestInterval = defaults.double(forKey: "autoSuggestInterval")
         if autoSuggestInterval == 0 {
             autoSuggestInterval = 30.0
+        }
+
+        if let savedLanguage = defaults.string(forKey: "languagePreference"),
+           let language = AppLanguage(rawValue: savedLanguage) {
+            languagePreference = language
+        }
+
+        if let savedTextGenModel = defaults.string(forKey: "selectedTextGenModelId") {
+            selectedTextGenModelId = savedTextGenModel
         }
     }
 
@@ -111,6 +124,22 @@ public final class SettingsViewModel {
         defaults.set(autoSuggestInterval, forKey: "autoSuggestInterval")
     }
 
+    func updateLanguagePreference(_ language: AppLanguage) {
+        languagePreference = language
+        let defaults = UserDefaults.standard
+        defaults.set(language.rawValue, forKey: "languagePreference")
+    }
+
+    func updateSelectedTextGenModel(_ modelId: String) {
+        selectedTextGenModelId = modelId
+        let defaults = UserDefaults.standard
+        defaults.set(modelId, forKey: "selectedTextGenModelId")
+    }
+
+    var availableTextGenModels: [ModelDefinition] {
+        registry.availableModels().filter { $0.type == .textGen }
+    }
+
     func openDatabaseInFinder() {
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: storageManager.databaseDirectory.path)
     }
@@ -133,18 +162,38 @@ public final class SettingsViewModel {
         totalStorageGB = Double(totalSize) / 1_000_000_000
 
         var modelSize: Int64 = 0
+
+        // Check primary models directory
+        modelSize += calculateDirectorySize(at: storageManager.modelsDirectory)
+
+        // Also check alternative models directory (sandbox/non-sandbox counterpart)
+        if let altDir = storageManager.alternativeModelsDirectory {
+            modelSize += calculateDirectorySize(at: altDir)
+        }
+
+        totalModelStorageGB = Double(modelSize) / 1_000_000_000
+    }
+
+    private func calculateDirectorySize(at url: URL) -> Int64 {
+        let fileManager = FileManager.default
+        var size: Int64 = 0
+
+        guard fileManager.fileExists(atPath: url.path) else {
+            return 0
+        }
+
         if let enumerator = fileManager.enumerator(
-            at: storageManager.modelsDirectory,
+            at: url,
             includingPropertiesForKeys: [.fileSizeKey]
         ) {
             for case let fileURL as URL in enumerator {
                 if let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
                    let fileSize = resourceValues.fileSize {
-                    modelSize += Int64(fileSize)
+                    size += Int64(fileSize)
                 }
             }
         }
-        totalModelStorageGB = Double(modelSize) / 1_000_000_000
+        return size
     }
 
     func confirmClearData() {

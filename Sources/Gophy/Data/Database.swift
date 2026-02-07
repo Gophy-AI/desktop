@@ -119,6 +119,57 @@ public final class GophyDatabase: Sendable {
             try db.create(index: "idx_embedding_id_mapping_chunk_id", on: "embedding_id_mapping", columns: ["chunk_id"])
         }
 
+        // Migration to fix embedding dimension from 768 to 384 (MiniLM L6 v2 produces 384-dim embeddings)
+        migrator.registerMigration("v9_fix_embedding_dimension") { db in
+            // Drop old tables and recreate with correct dimension
+            try db.execute(sql: "DROP TABLE IF EXISTS embedding_id_mapping")
+            try db.execute(sql: "DROP TABLE IF EXISTS embeddings")
+
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE embeddings USING vec0(
+                    embedding FLOAT[384]
+                )
+                """)
+
+            try db.create(table: "embedding_id_mapping") { t in
+                t.column("rowid", .integer).primaryKey()
+                t.column("chunk_id", .text).notNull().unique()
+            }
+            try db.create(index: "idx_embedding_id_mapping_chunk_id", on: "embedding_id_mapping", columns: ["chunk_id"])
+        }
+
+        // Migration to reindex embeddings for multilingual-e5-small model
+        // Switching from all-MiniLM-L6-v2 to multilingual-e5-small requires re-indexing
+        // because embedding spaces differ between models (even with same dimension)
+        migrator.registerMigration("v10_reindex_for_multilingual_e5") { db in
+            // Drop existing tables to clear all embeddings
+            try db.execute(sql: "DROP TABLE IF EXISTS embedding_id_mapping")
+            try db.execute(sql: "DROP TABLE IF EXISTS embeddings")
+
+            // Recreate embeddings virtual table with same 384 dimension
+            // (multilingual-e5-small produces 384-dim embeddings like all-MiniLM-L6-v2)
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE embeddings USING vec0(
+                    embedding FLOAT[384]
+                )
+                """)
+
+            // Recreate embedding_id_mapping table
+            try db.create(table: "embedding_id_mapping") { t in
+                t.column("rowid", .integer).primaryKey()
+                t.column("chunk_id", .text).notNull().unique()
+            }
+
+            // Recreate index
+            try db.create(index: "idx_embedding_id_mapping_chunk_id", on: "embedding_id_mapping", columns: ["chunk_id"])
+        }
+
+        migrator.registerMigration("v11_add_language_to_segments") { db in
+            try db.alter(table: "transcript_segments") { t in
+                t.add(column: "detectedLanguage", .text)
+            }
+        }
+
         return migrator
     }
 }

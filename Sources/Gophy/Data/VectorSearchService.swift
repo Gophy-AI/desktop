@@ -18,9 +18,12 @@ public final class VectorSearchService: Sendable {
         self.database = database
     }
 
+    // multilingual-e5-small produces 384-dimensional embeddings
+    private static let embeddingDimension = 384
+
     public func insert(id: String, embedding: [Float]) async throws {
-        guard embedding.count == 768 else {
-            throw VectorSearchError.invalidEmbeddingDimension
+        guard embedding.count == Self.embeddingDimension else {
+            throw VectorSearchError.invalidEmbeddingDimension(expected: Self.embeddingDimension, got: embedding.count)
         }
 
         let blob = embedding.withUnsafeBytes { Data($0) }
@@ -39,8 +42,8 @@ public final class VectorSearchService: Sendable {
     }
 
     public func search(query: [Float], limit: Int) async throws -> [VectorSearchResult] {
-        guard query.count == 768 else {
-            throw VectorSearchError.invalidEmbeddingDimension
+        guard query.count == Self.embeddingDimension else {
+            throw VectorSearchError.invalidEmbeddingDimension(expected: Self.embeddingDimension, got: query.count)
         }
 
         let queryBlob = query.withUnsafeBytes { Data($0) }
@@ -101,6 +104,13 @@ public final class VectorSearchService: Sendable {
     }
 }
 
-public enum VectorSearchError: Error {
-    case invalidEmbeddingDimension
+public enum VectorSearchError: Error, LocalizedError {
+    case invalidEmbeddingDimension(expected: Int, got: Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidEmbeddingDimension(let expected, let got):
+            return "Invalid embedding dimension: expected \(expected), got \(got)"
+        }
+    }
 }

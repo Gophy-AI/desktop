@@ -122,6 +122,9 @@ public final class MeetingViewModel {
         case .statusChange(let newStatus):
             status = newStatus
 
+        case .playbackProgress:
+            break
+
         case .error(let error):
             if let errorWrapper = error as? MeetingEvent.ErrorWrapper {
                 errorMessage = errorWrapper.underlyingError

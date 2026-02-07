@@ -9,6 +9,7 @@ public struct TranscriptSegmentRecord: Codable, Sendable {
     public let startTime: Double
     public let endTime: Double
     public let createdAt: Date
+    public let detectedLanguage: String?
 
     public init(
         id: String,
@@ -17,7 +18,8 @@ public struct TranscriptSegmentRecord: Codable, Sendable {
         speaker: String,
         startTime: Double,
         endTime: Double,
-        createdAt: Date
+        createdAt: Date,
+        detectedLanguage: String? = nil
     ) {
         self.id = id
         self.meetingId = meetingId
@@ -26,6 +28,7 @@ public struct TranscriptSegmentRecord: Codable, Sendable {
         self.startTime = startTime
         self.endTime = endTime
         self.createdAt = createdAt
+        self.detectedLanguage = detectedLanguage
     }
 }
 

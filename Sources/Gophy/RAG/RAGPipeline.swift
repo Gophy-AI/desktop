@@ -44,7 +44,7 @@ public final class RAGPipeline: Sendable {
         AsyncStream { continuation in
             Task {
                 do {
-                    let embedding = try await embeddingEngine.embed(text: question)
+                    let embedding = try await embeddingEngine.embed(text: question, mode: .query)
 
                     let searchResults = try await vectorSearchService.search(query: embedding, limit: topK)
 

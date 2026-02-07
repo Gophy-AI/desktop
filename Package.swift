@@ -13,9 +13,14 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMinor(from: "2.29.3")),
+        // Local copy with Swift 6 fix (removed `consuming` keyword in LoRAContainer.swift)
+        .package(path: "vendor/mlx-swift-lm"),
         .package(url: "https://github.com/argmaxinc/WhisperKit", from: "0.9.0"),
-        .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0")
+        .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
+        .package(url: "https://github.com/google/GTMAppAuth", from: "5.0.0"),
+        .package(url: "https://github.com/openid/AppAuth-iOS.git", from: "2.0.0"),
+        .package(url: "https://github.com/MacPaw/OpenAI", from: "0.4.0"),
+        .package(url: "https://github.com/jamesrochabrun/SwiftAnthropic", from: "1.0.0")
     ],
     targets: [
         .target(
@@ -36,7 +41,11 @@ let package = Package(
                 .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
-                .product(name: "GRDB", package: "GRDB.swift")
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "GTMAppAuth", package: "GTMAppAuth"),
+                .product(name: "AppAuth", package: "AppAuth-iOS"),
+                .product(name: "OpenAI", package: "OpenAI"),
+                .product(name: "SwiftAnthropic", package: "SwiftAnthropic")
             ],
             exclude: [
                 "Gophy.entitlements",

@@ -203,7 +203,7 @@ public actor SuggestionEngine {
         let combinedText = transcript.map { $0.text }.joined(separator: " ")
 
         // Embed query
-        let queryEmbedding = try await embeddingEngine.embed(text: combinedText)
+        let queryEmbedding = try await embeddingEngine.embed(text: combinedText, mode: .query)
 
         // Search for similar segments and chunks
         let searchResults = try await vectorSearchService.search(query: queryEmbedding, limit: 5)

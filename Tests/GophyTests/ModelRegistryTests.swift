@@ -24,9 +24,9 @@ final class ModelRegistryTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testAvailableModelsReturnsExactlyFourModels() throws {
+    func testAvailableModelsReturnsExactlyFiveModels() throws {
         let models = modelRegistry.availableModels()
-        XCTAssertEqual(models.count, 4, "ModelRegistry should return exactly 4 models")
+        XCTAssertEqual(models.count, 5, "ModelRegistry should return exactly 5 models")
     }
 
     func testEachModelHasCorrectType() throws {
@@ -36,7 +36,7 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(sttModels.count, 1, "Should have exactly 1 STT model")
 
         let textGenModels = models.filter { $0.type == .textGen }
-        XCTAssertEqual(textGenModels.count, 1, "Should have exactly 1 TextGen model")
+        XCTAssertEqual(textGenModels.count, 2, "Should have exactly 2 TextGen models")
 
         let ocrModels = models.filter { $0.type == .ocr }
         XCTAssertEqual(ocrModels.count, 1, "Should have exactly 1 OCR model")
@@ -123,7 +123,7 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(ocrModel?.huggingFaceID, "mlx-community/Qwen2.5-VL-7B-Instruct-4bit")
 
         let embeddingModel = models.first { $0.type == .embedding }
-        XCTAssertEqual(embeddingModel?.huggingFaceID, "nomic-ai/nomic-embed-text-v1.5")
+        XCTAssertEqual(embeddingModel?.huggingFaceID, "intfloat/multilingual-e5-small")
     }
 
     func testModelDefinitionsHaveCorrectMemorySizes() throws {
@@ -147,15 +147,15 @@ final class ModelRegistryTests: XCTestCase {
             XCTFail("OCR model not found")
             return
         }
-        XCTAssertEqual(ocrModel.approximateSizeGB, 4.0, accuracy: 0.1)
-        XCTAssertEqual(ocrModel.memoryUsageGB, 4.0, accuracy: 0.1)
+        XCTAssertEqual(ocrModel.approximateSizeGB, 5.3, accuracy: 0.1)
+        XCTAssertEqual(ocrModel.memoryUsageGB, 5.5, accuracy: 0.1)
 
         guard let embeddingModel = models.first(where: { $0.type == .embedding }) else {
             XCTFail("Embedding model not found")
             return
         }
-        XCTAssertEqual(embeddingModel.approximateSizeGB, 0.3, accuracy: 0.1)
-        XCTAssertEqual(embeddingModel.memoryUsageGB, 0.3, accuracy: 0.1)
+        XCTAssertEqual(embeddingModel.approximateSizeGB, 0.47, accuracy: 0.05)
+        XCTAssertEqual(embeddingModel.memoryUsageGB, 0.5, accuracy: 0.05)
     }
 
     func testModelDefinitionsHaveDisplayNames() throws {
@@ -176,7 +176,7 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(ocrModel?.name, "Qwen2.5-VL 7B Instruct 4-bit")
 
         let embeddingModel = models.first { $0.type == .embedding }
-        XCTAssertEqual(embeddingModel?.name, "nomic-embed-text v1.5")
+        XCTAssertEqual(embeddingModel?.name, "Multilingual E5 Small (Embeddings)")
     }
 
     func testModelDefinitionsAreUnique() throws {

@@ -15,6 +15,7 @@ struct SettingsView: View {
                     ErrorBanner(message: errorMessage)
                 }
 
+                languageSection
                 audioSection
                 modelsSection
                 storageSection
@@ -34,6 +35,34 @@ struct SettingsView: View {
         } message: {
             Text("This will permanently delete all meetings, transcripts, documents, and chat history. This action cannot be undone.")
         }
+    }
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Language")
+                .font(.headline)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Language", selection: $viewModel.languagePreference) {
+                    ForEach(AppLanguage.allCases, id: \.self) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: viewModel.languagePreference) { _, newValue in
+                    viewModel.updateLanguagePreference(newValue)
+                }
+
+                Text("When set to Auto-detect, Gophy detects the spoken language automatically. Force a language for better accuracy in single-language meetings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
     }
 
     private var audioSection: some View {
@@ -107,6 +136,24 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Models")
                 .font(.headline)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Text Generation Model", selection: $viewModel.selectedTextGenModelId) {
+                    ForEach(viewModel.availableTextGenModels, id: \.id) { model in
+                        Text(model.name).tag(model.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: viewModel.selectedTextGenModelId) { _, newValue in
+                    viewModel.updateSelectedTextGenModel(newValue)
+                }
+
+                Text("Qwen3 supports 119 languages (vs 29 for Qwen2.5) and improved benchmarks. Requires ~4.5 GB.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Divider()
 

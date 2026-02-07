@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.gophy.app", category: "MeetingSession")
 
 // MARK: - Protocols for Dependencies
 
@@ -11,6 +14,7 @@ extension ModeController: ModeControllerProtocol {}
 public protocol TranscriptionPipelineProtocol: Sendable {
     nonisolated func start(mixedStream: AsyncStream<LabeledAudioChunk>) -> AsyncStream<TranscriptSegment>
     func stop() async
+    func setLanguageHint(_ hint: String?) async
 }
 
 extension TranscriptionPipeline: TranscriptionPipelineProtocol {}
@@ -54,7 +58,6 @@ public actor MeetingSessionController {
     private let embeddingPipeline: any EmbeddingPipelineProtocol
     private let microphoneCapture: any MicrophoneCaptureProtocol
     private let systemAudioCapture: any SystemAudioCaptureProtocol
-    private let audioMixer: any AudioMixerProtocol
 
     private var currentMeetingId: String?
     private var currentStatus: MeetingStatus = .idle
@@ -73,8 +76,7 @@ public actor MeetingSessionController {
         meetingRepository: any MeetingRepositoryProtocol,
         embeddingPipeline: any EmbeddingPipelineProtocol,
         microphoneCapture: any MicrophoneCaptureProtocol,
-        systemAudioCapture: any SystemAudioCaptureProtocol,
-        audioMixer: any AudioMixerProtocol
+        systemAudioCapture: any SystemAudioCaptureProtocol
     ) {
         self.modeController = modeController
         self.transcriptionPipeline = transcriptionPipeline
@@ -82,7 +84,6 @@ public actor MeetingSessionController {
         self.embeddingPipeline = embeddingPipeline
         self.microphoneCapture = microphoneCapture
         self.systemAudioCapture = systemAudioCapture
-        self.audioMixer = audioMixer
 
         var continuation: AsyncStream<MeetingEvent>.Continuation?
         self.eventStream = AsyncStream { cont in
@@ -112,14 +113,20 @@ public actor MeetingSessionController {
     }
 
     public func start(title: String) async throws {
+        logger.info("Starting meeting: \(title, privacy: .public)")
+
         guard currentStatus == .idle || currentStatus == .completed else {
+            logger.error("Session already active")
             throw MeetingSessionError.sessionAlreadyActive
         }
 
         updateStatus(.starting)
+        logger.info("Status: starting")
 
         // Switch to meeting mode (loads transcription + text generation engines)
+        logger.info("Switching to meeting mode...")
         try await modeController.switchMode(.meeting)
+        logger.info("Meeting mode active")
 
         // Create meeting record
         let meetingId = UUID().uuidString
@@ -132,18 +139,41 @@ public actor MeetingSessionController {
             status: "active",
             createdAt: Date()
         )
+        logger.info("Creating meeting record...")
         try await meetingRepository.create(meeting)
         currentMeetingId = meetingId
+        logger.info("Meeting record created: \(meetingId, privacy: .public)")
 
-        // Start audio capture
-        _ = microphoneCapture.start()
-        _ = systemAudioCapture.start()
+        // Start audio capture and create mixer with the streams
+        logger.info("Starting microphone capture...")
+        let micStream = microphoneCapture.start()
+        logger.info("Microphone capture started")
 
-        // Create audio mixer from both streams
+        logger.info("Starting system audio capture...")
+        let systemStream = systemAudioCapture.start()
+        logger.info("System audio capture started")
+
+        // Create audio mixer with the capture streams
+        logger.info("Creating audio mixer...")
+        let audioMixer = AudioMixer(
+            microphoneStream: micStream,
+            systemAudioStream: systemStream
+        )
         let mixedStream = audioMixer.start()
+        logger.info("Audio mixer started")
+
+        // Set language hint from user preferences
+        if let savedLanguage = UserDefaults.standard.string(forKey: "languagePreference"),
+           let language = AppLanguage(rawValue: savedLanguage) {
+            await transcriptionPipeline.setLanguageHint(language.isoCode)
+        } else {
+            await transcriptionPipeline.setLanguageHint(nil)
+        }
 
         // Start transcription pipeline
+        logger.info("Starting transcription pipeline...")
         let transcriptStream = transcriptionPipeline.start(mixedStream: mixedStream)
+        logger.info("Transcription pipeline started")
 
         // Process transcript segments
         transcriptionTask = Task {
@@ -153,6 +183,7 @@ public actor MeetingSessionController {
         }
 
         updateStatus(.active)
+        logger.info("Meeting started successfully!")
     }
 
     public func stop() async throws {
@@ -189,11 +220,17 @@ public actor MeetingSessionController {
         )
         try await meetingRepository.update(updatedMeeting)
 
-        // Index meeting for vector search
-        try await embeddingPipeline.indexMeeting(meetingId: meetingId)
+        // Index meeting for vector search (optional - skip if embedding not available)
+        do {
+            try await embeddingPipeline.indexMeeting(meetingId: meetingId)
+            logger.info("Meeting indexed for vector search")
+        } catch {
+            logger.warning("Skipping vector indexing: \(error.localizedDescription, privacy: .public)")
+        }
 
         currentMeetingId = nil
         updateStatus(.completed)
+        logger.info("Meeting stopped successfully")
     }
 
     public func pause() async {
@@ -218,10 +255,14 @@ public actor MeetingSessionController {
         }
 
         // Restart audio capture
-        _ = microphoneCapture.start()
-        _ = systemAudioCapture.start()
+        let micStream = microphoneCapture.start()
+        let systemStream = systemAudioCapture.start()
 
-        // Restart mixer and transcription (pipeline already configured)
+        // Create new mixer and restart transcription
+        let audioMixer = AudioMixer(
+            microphoneStream: micStream,
+            systemAudioStream: systemStream
+        )
         let mixedStream = audioMixer.start()
         let transcriptStream = transcriptionPipeline.start(mixedStream: mixedStream)
 
@@ -247,7 +288,8 @@ public actor MeetingSessionController {
             speaker: segment.speaker,
             startTime: segment.startTime,
             endTime: segment.endTime,
-            createdAt: Date()
+            createdAt: Date(),
+            detectedLanguage: segment.detectedLanguage?.rawValue
         )
 
         do {

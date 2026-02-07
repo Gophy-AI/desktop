@@ -1,8 +1,8 @@
 import Foundation
 
 public protocol EmbeddingProviding: Sendable {
-    func embed(text: String) async throws -> [Float]
-    func embedBatch(texts: [String]) async throws -> [[Float]]
+    func embed(text: String, mode: EmbeddingMode) async throws -> [Float]
+    func embedBatch(texts: [String], mode: EmbeddingMode) async throws -> [[Float]]
 }
 
 extension EmbeddingEngine: EmbeddingProviding {}
@@ -31,14 +31,14 @@ public final class EmbeddingPipeline: Sendable {
     public func indexTranscriptSegment(segment: TranscriptSegmentRecord) async throws {
         try await vectorSearchService.delete(id: segment.id)
 
-        let embedding = try await embeddingEngine.embed(text: segment.text)
+        let embedding = try await embeddingEngine.embed(text: segment.text, mode: .passage)
         try await vectorSearchService.insert(id: segment.id, embedding: embedding)
     }
 
     public func indexDocumentChunk(chunk: DocumentChunkRecord) async throws {
         try await vectorSearchService.delete(id: chunk.id)
 
-        let embedding = try await embeddingEngine.embed(text: chunk.content)
+        let embedding = try await embeddingEngine.embed(text: chunk.content, mode: .passage)
         try await vectorSearchService.insert(id: chunk.id, embedding: embedding)
     }
 
@@ -71,7 +71,7 @@ public final class EmbeddingPipeline: Sendable {
             }
 
             let texts = batch.map { $0.text }
-            let embeddings = try await embeddingEngine.embedBatch(texts: texts)
+            let embeddings = try await embeddingEngine.embedBatch(texts: texts, mode: .passage)
 
             for (index, segment) in batch.enumerated() {
                 try await vectorSearchService.insert(id: segment.id, embedding: embeddings[index])
@@ -88,7 +88,7 @@ public final class EmbeddingPipeline: Sendable {
             }
 
             let texts = batch.map { $0.content }
-            let embeddings = try await embeddingEngine.embedBatch(texts: texts)
+            let embeddings = try await embeddingEngine.embedBatch(texts: texts, mode: .passage)
 
             for (index, chunk) in batch.enumerated() {
                 try await vectorSearchService.insert(id: chunk.id, embedding: embeddings[index])

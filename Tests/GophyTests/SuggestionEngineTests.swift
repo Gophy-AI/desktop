@@ -302,11 +302,11 @@ actor MockVectorSearchForSuggestion: VectorSearchForSuggestion {
 actor MockEmbeddingForSuggestion: EmbeddingProviding {
     private var embeddingToReturn: [Float] = []
 
-    func embed(text: String) async throws -> [Float] {
+    func embed(text: String, mode: EmbeddingMode = .passage) async throws -> [Float] {
         embeddingToReturn
     }
 
-    func embedBatch(texts: [String]) async throws -> [[Float]] {
+    func embedBatch(texts: [String], mode: EmbeddingMode = .passage) async throws -> [[Float]] {
         texts.map { _ in embeddingToReturn }
     }
 

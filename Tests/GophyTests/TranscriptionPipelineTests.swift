@@ -8,7 +8,7 @@ final class MockPipelineTranscriptionEngine: @unchecked Sendable, PipelineTransc
     private var transcribeCalls: [(samples: [Float], callback: ([TranscriptionSegment]) -> Void)] = []
     private let lock = NSLock()
 
-    func transcribe(audioArray: [Float], sampleRate: Int = 16000) async throws -> [TranscriptionSegment] {
+    func transcribe(audioArray: [Float], sampleRate: Int = 16000, language: String? = nil) async throws -> [TranscriptionSegment] {
         // Simulate transcription with mock result
         let segment = TranscriptionSegment(
             text: "Mock transcription",
@@ -43,9 +43,11 @@ struct TranscriptionPipelineTests {
         let mockCapture = MockAudioMixerCapture()
         let micStream = await mockCapture.start()
 
+        let sysCapture = MockAudioMixerCapture()
+
         let mixer = AudioMixer(
             microphoneStream: micStream,
-            systemAudioStream: AsyncStream { _ in }
+            systemAudioStream: sysCapture.start()
         )
 
         let outputStream = await pipeline.start(mixedStream: mixer.start())
@@ -78,6 +80,7 @@ struct TranscriptionPipelineTests {
         try? await Task.sleep(nanoseconds: 500_000_000)
 
         mockCapture.finish()
+        sysCapture.finish()
 
         var receivedSegment: TranscriptSegment?
         for await segment in outputStream {
@@ -164,10 +167,11 @@ struct TranscriptionPipelineTests {
         )
 
         let micCapture = MockAudioMixerCapture()
+        let sysCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
             microphoneStream: await micCapture.start(),
-            systemAudioStream: AsyncStream { _ in }
+            systemAudioStream: sysCapture.start()
         )
 
         let outputStream = await pipeline.start(mixedStream: mixer.start())
@@ -189,6 +193,7 @@ struct TranscriptionPipelineTests {
 
         try? await Task.sleep(nanoseconds: 500_000_000)
         micCapture.finish()
+        sysCapture.finish()
 
         var segments: [TranscriptSegment] = []
         for await segment in outputStream {
@@ -214,10 +219,11 @@ struct TranscriptionPipelineTests {
         )
 
         let micCapture = MockAudioMixerCapture()
+        let sysCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
             microphoneStream: await micCapture.start(),
-            systemAudioStream: AsyncStream { _ in }
+            systemAudioStream: sysCapture.start()
         )
 
         let outputStream = await pipeline.start(mixedStream: mixer.start())
@@ -239,6 +245,7 @@ struct TranscriptionPipelineTests {
         // Stop pipeline - should flush buffered audio
         await pipeline.stop()
         micCapture.finish()
+        sysCapture.finish()
 
         var receivedAnySegment = false
         for await _ in outputStream {
@@ -258,10 +265,11 @@ struct TranscriptionPipelineTests {
         )
 
         let micCapture = MockAudioMixerCapture()
+        let sysCapture = MockAudioMixerCapture()
 
         let mixer = AudioMixer(
             microphoneStream: await micCapture.start(),
-            systemAudioStream: AsyncStream { _ in }
+            systemAudioStream: sysCapture.start()
         )
 
         let outputStream = await pipeline.start(mixedStream: mixer.start())
@@ -283,6 +291,7 @@ struct TranscriptionPipelineTests {
 
         try? await Task.sleep(nanoseconds: 500_000_000)
         micCapture.finish()
+        sysCapture.finish()
 
         // Should receive transcription after accumulating enough audio
         var receivedSegment = false

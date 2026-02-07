@@ -8,12 +8,12 @@ final class MockEmbeddingProvider: EmbeddingProviding, @unchecked Sendable {
     var embedCallCount = 0
     var embedBatchCallCount = 0
 
-    func embed(text: String) async throws -> [Float] {
+    func embed(text: String, mode: EmbeddingMode = .passage) async throws -> [Float] {
         embedCallCount += 1
         return deterministicEmbedding(for: text)
     }
 
-    func embedBatch(texts: [String]) async throws -> [[Float]] {
+    func embedBatch(texts: [String], mode: EmbeddingMode = .passage) async throws -> [[Float]] {
         embedBatchCallCount += 1
         return texts.map { deterministicEmbedding(for: $0) }
     }

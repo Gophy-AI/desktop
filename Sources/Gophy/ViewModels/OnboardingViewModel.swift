@@ -9,13 +9,15 @@ final class OnboardingViewModel {
     enum OnboardingStep: Int, CaseIterable {
         case welcome = 0
         case permissions = 1
-        case models = 2
-        case done = 3
+        case language = 2
+        case models = 3
+        case done = 4
     }
 
     var currentStep: OnboardingStep = .welcome
     var microphonePermissionStatus: AVAuthorizationStatus = .notDetermined
     var isCheckingPermissions: Bool = false
+    var languagePreference: AppLanguage = .auto
 
     private let modelManagerViewModel: ModelManagerViewModel
 
@@ -87,12 +89,19 @@ final class OnboardingViewModel {
         }
     }
 
+    func updateLanguagePreference(_ language: AppLanguage) {
+        languagePreference = language
+        UserDefaults.standard.set(language.rawValue, forKey: "languagePreference")
+    }
+
     func canProceed(from step: OnboardingStep) -> Bool {
         switch step {
         case .welcome:
             return true
         case .permissions:
             return microphonePermissionStatus == .authorized
+        case .language:
+            return true
         case .models:
             return hasDownloadedModels
         case .done:

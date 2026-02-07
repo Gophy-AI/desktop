@@ -3,37 +3,28 @@ import Foundation
 @testable import Gophy
 
 /// Mock implementation for testing without actual hardware
-actor MockSystemAudioCapture: SystemAudioCaptureProtocol {
+final class MockSystemAudioCapture: SystemAudioCaptureProtocol, @unchecked Sendable {
     private var isRunning = false
     private var continuation: AsyncStream<AudioChunk>.Continuation?
 
     nonisolated func start() -> AsyncStream<AudioChunk> {
-        AsyncStream { continuation in
-            Task { [weak self] in
-                await self?.setContinuation(continuation)
-                await self?.setRunning(true)
-            }
+        let stream = AsyncStream<AudioChunk> { continuation in
+            self.continuation = continuation
+            self.isRunning = true
         }
+        return stream
     }
 
-    private func setContinuation(_ continuation: AsyncStream<AudioChunk>.Continuation) {
-        self.continuation = continuation
-    }
-    
     func stop() async {
         continuation?.finish()
         continuation = nil
         isRunning = false
     }
-    
+
     func emitChunk(_ chunk: AudioChunk) {
         continuation?.yield(chunk)
     }
-    
-    private func setRunning(_ value: Bool) {
-        isRunning = value
-    }
-    
+
     func getIsRunning() -> Bool {
         return isRunning
     }
@@ -59,8 +50,8 @@ struct SystemAudioCaptureServiceTests {
             source: .systemAudio
         )
         
-        await mock.emitChunk(chunk1)
-        await mock.emitChunk(chunk2)
+        mock.emitChunk(chunk1)
+        mock.emitChunk(chunk2)
         await mock.stop()
         
         // Collect chunks
@@ -87,7 +78,7 @@ struct SystemAudioCaptureServiceTests {
             source: .systemAudio
         )
         
-        await mock.emitChunk(chunk)
+        mock.emitChunk(chunk)
         await mock.stop()
         
         var receivedChunk: AudioChunk?
@@ -116,7 +107,7 @@ struct SystemAudioCaptureServiceTests {
             source: .systemAudio
         )
         
-        await mock.emitChunk(chunk)
+        mock.emitChunk(chunk)
         await mock.stop()
         
         var receivedChunk: AudioChunk?
@@ -133,8 +124,8 @@ struct SystemAudioCaptureServiceTests {
         let mock = MockSystemAudioCapture()
         let stream = mock.start()
         
-        #expect(await mock.getIsRunning() == true)
-        
+        #expect(mock.getIsRunning() == true)
+
         await mock.stop()
         
         // Stream should complete without any new chunks
@@ -144,7 +135,7 @@ struct SystemAudioCaptureServiceTests {
         }
         
         #expect(chunkCount == 0)
-        #expect(await mock.getIsRunning() == false)
+        #expect(mock.getIsRunning() == false)
     }
     
     @Test("timestamps are monotonically increasing")
@@ -159,10 +150,10 @@ struct SystemAudioCaptureServiceTests {
                 timestamp: TimeInterval(i),
                 source: .systemAudio
             )
-            await mock.emitChunk(chunk)
+            mock.emitChunk(chunk)
         }
         await mock.stop()
-        
+
         var timestamps: [TimeInterval] = []
         for await chunk in stream {
             timestamps.append(chunk.timestamp)

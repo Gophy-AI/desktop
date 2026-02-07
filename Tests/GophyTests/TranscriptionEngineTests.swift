@@ -80,6 +80,27 @@ final class TranscriptionEngineTests: XCTestCase {
         try await engine.load()
         XCTAssertTrue(engine.isLoaded)
     }
+
+    func testTranscribeWithNilLanguageUsesAutoDetect() async throws {
+        try await engine.load()
+        let audioArray: [Float] = Array(repeating: 0.0, count: 16000)
+        _ = try await engine.transcribe(audioArray: audioArray, language: nil)
+        XCTAssertNil(mockWhisperKit.lastLanguage)
+    }
+
+    func testTranscribeWithRussianLanguagePassesLanguageHint() async throws {
+        try await engine.load()
+        let audioArray: [Float] = Array(repeating: 0.0, count: 16000)
+        _ = try await engine.transcribe(audioArray: audioArray, language: "ru")
+        XCTAssertEqual(mockWhisperKit.lastLanguage, "ru")
+    }
+
+    func testTranscribeWithSpanishLanguagePassesLanguageHint() async throws {
+        try await engine.load()
+        let audioArray: [Float] = Array(repeating: 0.0, count: 16000)
+        _ = try await engine.transcribe(audioArray: audioArray, language: "es")
+        XCTAssertEqual(mockWhisperKit.lastLanguage, "es")
+    }
 }
 
 final class TranscriptionMockModelRegistry: ModelRegistryProtocol {
@@ -105,8 +126,11 @@ final class TranscriptionMockModelRegistry: ModelRegistryProtocol {
     }
 }
 
-final class MockWhisperKit: WhisperKitProtocol {
-    func transcribe(audioArray: [Float]) async throws -> [WhisperResultProtocol] {
+final class MockWhisperKit: WhisperKitProtocol, @unchecked Sendable {
+    var lastLanguage: String?
+
+    func transcribe(audioArray: [Float], language: String? = nil) async throws -> [WhisperResultProtocol] {
+        lastLanguage = language
         return [
             MockWhisperResult(segments: [
                 MockWhisperSegment(text: "Hello world", start: 0.0, end: 1.0),

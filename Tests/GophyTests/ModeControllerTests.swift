@@ -5,7 +5,7 @@ import Foundation
 @Suite("ModeController Tests")
 struct ModeControllerTests {
 
-    @Test("Meeting mode loads WhisperKit, Qwen2.5, and nomic-embed")
+    @Test("Meeting mode loads WhisperKit and nomic-embed")
     func testMeetingModeLoading() async throws {
         let mockTranscription = MockTranscriptionEngine()
         let mockTextGen = MockTextGenerationEngine()
@@ -39,7 +39,7 @@ struct ModeControllerTests {
         stateTask.cancel()
 
         #expect(mockTranscription.loadCalled)
-        #expect(mockTextGen.loadCalled)
+        #expect(!mockTextGen.loadCalled)
         #expect(mockEmbedding.loadCalled)
         let ocrLoadCalled1 = await mockOCR.getLoadCalled()
         #expect(!ocrLoadCalled1)
@@ -115,7 +115,7 @@ struct ModeControllerTests {
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(mockTranscription.loadCalled)
-        #expect(mockTextGen.loadCalled)
+        #expect(!mockTextGen.loadCalled)
         let ocrLoadCalled3 = await mockOCR.getLoadCalled()
         #expect(!ocrLoadCalled3)
 

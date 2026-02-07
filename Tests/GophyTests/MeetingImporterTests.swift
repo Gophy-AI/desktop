@@ -164,11 +164,11 @@ final class MeetingImporterTests: XCTestCase {
 // MARK: - Mock Embedding Engine
 
 private final class MockImportEmbeddingEngine: Sendable, EmbeddingProviding {
-    func embed(text: String) async throws -> [Float] {
+    func embed(text: String, mode: EmbeddingMode = .passage) async throws -> [Float] {
         return Array(repeating: 0.0, count: 768)
     }
 
-    func embedBatch(texts: [String]) async throws -> [[Float]] {
+    func embedBatch(texts: [String], mode: EmbeddingMode = .passage) async throws -> [[Float]] {
         return texts.map { _ in Array(repeating: 0.0, count: 768) }
     }
 }

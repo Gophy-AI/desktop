@@ -16,7 +16,7 @@ struct OnboardingView: View {
 
             navigationBar
         }
-        .frame(width: 600, height: 500)
+        .frame(width: 600, height: 580)
     }
 
     @ViewBuilder
@@ -26,6 +26,8 @@ struct OnboardingView: View {
             WelcomeStep(onNext: { viewModel.nextStep() })
         case .permissions:
             PermissionsStep(viewModel: viewModel)
+        case .language:
+            LanguageStep(viewModel: viewModel)
         case .models:
             ModelsStep(viewModel: viewModel)
         case .done:
@@ -77,9 +79,9 @@ struct WelcomeStep: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "phone.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.blue)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 120, height: 120)
 
             Text("Welcome to Gophy")
                 .font(.largeTitle)
@@ -223,6 +225,47 @@ struct PermissionsStep: View {
             return "Not Requested"
         @unknown default:
             return "Unknown"
+        }
+    }
+}
+
+struct LanguageStep: View {
+    @Bindable var viewModel: OnboardingViewModel
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "globe")
+                .font(.system(size: 64))
+                .foregroundStyle(.blue)
+
+            Text("Select Your Language")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Text("Choose your primary language for transcription and suggestions")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Picker("Language", selection: $viewModel.languagePreference) {
+                ForEach(AppLanguage.allCases, id: \.self) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+            .pickerStyle(.radioGroup)
+            .onChange(of: viewModel.languagePreference) { _, newValue in
+                viewModel.updateLanguagePreference(newValue)
+            }
+
+            Text("When set to Auto-detect, Gophy detects the spoken language automatically. Force a language for better accuracy in single-language meetings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+
+            Spacer()
         }
     }
 }

@@ -9,8 +9,6 @@ final class MeetingSessionControllerTests: XCTestCase {
     private var mockEmbeddingPipeline: MockEmbeddingPipeline!
     private var mockMicrophoneCapture: MockMicrophoneCaptureForMeeting!
     private var mockSystemAudioCapture: MockSystemAudioCaptureForMeeting!
-    private var mockAudioMixer: MockAudioMixer!
-
     override func setUp() async throws {
         try await super.setUp()
 
@@ -20,7 +18,6 @@ final class MeetingSessionControllerTests: XCTestCase {
         mockEmbeddingPipeline = MockEmbeddingPipeline()
         mockMicrophoneCapture = MockMicrophoneCaptureForMeeting()
         mockSystemAudioCapture = MockSystemAudioCaptureForMeeting()
-        mockAudioMixer = MockAudioMixer()
 
         controller = MeetingSessionController(
             modeController: mockModeController,
@@ -28,8 +25,7 @@ final class MeetingSessionControllerTests: XCTestCase {
             meetingRepository: mockMeetingRepository,
             embeddingPipeline: mockEmbeddingPipeline,
             microphoneCapture: mockMicrophoneCapture,
-            systemAudioCapture: mockSystemAudioCapture,
-            audioMixer: mockAudioMixer
+            systemAudioCapture: mockSystemAudioCapture
         )
     }
 
@@ -242,6 +238,7 @@ actor MockModeController: ModeControllerProtocol {
 
 actor MockTranscriptionPipeline: TranscriptionPipelineProtocol {
     private var segmentsToYield: [TranscriptSegment] = []
+    var lastLanguageHint: String?
 
     nonisolated func start(mixedStream: AsyncStream<LabeledAudioChunk>) -> AsyncStream<TranscriptSegment> {
         let capturedSelf = self
@@ -258,6 +255,10 @@ actor MockTranscriptionPipeline: TranscriptionPipelineProtocol {
 
     func stop() async {
         // No-op
+    }
+
+    func setLanguageHint(_ hint: String?) {
+        lastLanguageHint = hint
     }
 
     func setSegments(_ segments: [TranscriptSegment]) {
@@ -406,8 +407,3 @@ actor MockSystemAudioCaptureForMeeting: SystemAudioCaptureProtocol {
     }
 }
 
-actor MockAudioMixer: AudioMixerProtocol {
-    nonisolated func start() -> AsyncStream<LabeledAudioChunk> {
-        AsyncStream { _ in }
-    }
-}

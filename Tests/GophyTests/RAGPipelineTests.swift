@@ -147,17 +147,19 @@ final class MockEmbeddingEngineForRAG: EmbeddingProviding, @unchecked Sendable {
     var embedResult: [Float] = []
     var embedCallCount = 0
     var lastEmbedText: String?
+    var lastEmbedMode: EmbeddingMode?
 
-    func embed(text: String) async throws -> [Float] {
+    func embed(text: String, mode: EmbeddingMode = .passage) async throws -> [Float] {
         embedCallCount += 1
         lastEmbedText = text
+        lastEmbedMode = mode
         return embedResult
     }
 
-    func embedBatch(texts: [String]) async throws -> [[Float]] {
+    func embedBatch(texts: [String], mode: EmbeddingMode = .passage) async throws -> [[Float]] {
         var results: [[Float]] = []
         for text in texts {
-            results.append(try await embed(text: text))
+            results.append(try await embed(text: text, mode: mode))
         }
         return results
     }
