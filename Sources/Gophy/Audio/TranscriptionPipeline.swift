@@ -29,6 +29,13 @@ public actor TranscriptionPipeline {
     // Per-speaker audio buffers
     private var buffers: [String: AudioBuffer] = [:]
 
+    // Track active transcription tasks per speaker to avoid overlap
+    private var activeTranscriptions: Set<String> = []
+
+    // Generation counter to prevent stale processStream tasks from corrupting state
+    private var generation: UInt64 = 0
+    private var processingTask: Task<Void, Never>?
+
     // Sliding window configuration
     private let minBufferDurationSeconds: TimeInterval = 2.0
     private let maxBufferDurationSeconds: TimeInterval = 5.0
@@ -87,28 +94,42 @@ public actor TranscriptionPipeline {
 
             pipelineLogger.info("TranscriptionPipeline: setting up continuation")
             Task {
-                await self.setContinuation(continuation)
-                pipelineLogger.info("TranscriptionPipeline: starting to process stream")
-                await self.processStream(mixedStream)
+                await self.beginProcessing(mixedStream: mixedStream, continuation: continuation)
             }
         }
     }
 
-    private func setContinuation(_ continuation: AsyncStream<TranscriptSegment>.Continuation) {
+    private func beginProcessing(mixedStream: AsyncStream<LabeledAudioChunk>, continuation: AsyncStream<TranscriptSegment>.Continuation) {
+        // Cancel any previous processing
+        processingTask?.cancel()
+
+        // Increment generation so stale tasks know to exit
+        generation += 1
+        let gen = generation
+
+        // Reset state for new pipeline run
         self.continuation = continuation
+        self.isRunning = true
+        self.buffers.removeAll()
+        self.activeTranscriptions.removeAll()
+
+        pipelineLogger.info("TranscriptionPipeline: starting generation \(gen, privacy: .public)")
+
+        processingTask = Task {
+            await self.processStream(mixedStream, generation: gen)
+        }
     }
 
-    private func processStream(_ stream: AsyncStream<LabeledAudioChunk>) async {
-        isRunning = true
+    private func processStream(_ stream: AsyncStream<LabeledAudioChunk>, generation gen: UInt64) async {
         var chunkCount = 0
         var filteredCount = 0
         var passedCount = 0
 
-        pipelineLogger.info("TranscriptionPipeline starting to process stream")
+        pipelineLogger.info("TranscriptionPipeline starting to process stream (gen \(gen, privacy: .public))")
 
         for await chunk in stream {
-            guard isRunning else {
-                pipelineLogger.info("Pipeline stopped, breaking")
+            guard !Task.isCancelled, isRunning, self.generation == gen else {
+                pipelineLogger.info("Pipeline stopped or superseded (gen \(gen, privacy: .public)), breaking")
                 break
             }
 
@@ -145,21 +166,53 @@ public actor TranscriptionPipeline {
                 if passedCount <= 5 || passedCount % 10 == 0 {
                     pipelineLogger.info("Pipeline: buffer [\(speaker, privacy: .public)] duration: \(String(format: "%.2f", duration), privacy: .public)s (min: \(self.minBufferDurationSeconds, privacy: .public)s)")
                 }
-                if duration >= minBufferDurationSeconds {
-                    pipelineLogger.info("Pipeline: buffer ready, transcribing [\(speaker, privacy: .public)]...")
-                    await transcribeBuffer(speaker: speaker)
+                if duration >= minBufferDurationSeconds && !activeTranscriptions.contains(speaker) {
+                    pipelineLogger.info("Pipeline: buffer ready, scheduling transcription for [\(speaker, privacy: .public)]...")
+                    scheduleTranscription(speaker: speaker, generation: gen)
+                } else if duration >= maxBufferDurationSeconds && activeTranscriptions.contains(speaker) {
+                    // Buffer growing too large while transcription is active - trim oldest samples
+                    let targetSamples = Int(minBufferDurationSeconds * 16000.0)
+                    let excess = buffers[speaker]!.samples.count - targetSamples
+                    if excess > 0 {
+                        buffers[speaker]!.samples.removeFirst(excess)
+                        pipelineLogger.info("Pipeline: trimmed [\(speaker, privacy: .public)] buffer by \(excess, privacy: .public) samples (transcription in progress)")
+                    }
                 }
             }
         }
 
-        pipelineLogger.info("Pipeline stream ended. Total: \(chunkCount, privacy: .public) chunks, \(passedCount, privacy: .public) passed, \(filteredCount, privacy: .public) filtered")
+        pipelineLogger.info("Pipeline stream ended (gen \(gen, privacy: .public)). Total: \(chunkCount, privacy: .public) chunks, \(passedCount, privacy: .public) passed, \(filteredCount, privacy: .public) filtered")
 
-        // Flush all buffers on stream end
+        // Only flush/finish if we're still the active generation
+        guard self.generation == gen, !Task.isCancelled else {
+            pipelineLogger.info("Pipeline gen \(gen, privacy: .public) superseded, skipping flush")
+            return
+        }
+
+        // Wait for active transcriptions to complete before flushing
+        while !activeTranscriptions.isEmpty {
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            guard self.generation == gen, !Task.isCancelled else { return }
+        }
+
+        // Flush remaining buffers
         await flushAllBuffers()
         continuation?.finish()
     }
 
-    private func transcribeBuffer(speaker: String) async {
+    /// Schedule transcription as a non-blocking task so the stream loop continues consuming chunks
+    private func scheduleTranscription(speaker: String, generation gen: UInt64) {
+        activeTranscriptions.insert(speaker)
+
+        Task {
+            await self.transcribeBuffer(speaker: speaker, generation: gen)
+            self.activeTranscriptions.remove(speaker)
+        }
+    }
+
+    private func transcribeBuffer(speaker: String, generation gen: UInt64) async {
+        guard self.generation == gen, !Task.isCancelled else { return }
+
         guard var buffer = buffers[speaker], !buffer.samples.isEmpty else {
             pipelineLogger.warning("transcribeBuffer called but buffer is empty for [\(speaker, privacy: .public)]")
             return
@@ -167,7 +220,6 @@ public actor TranscriptionPipeline {
 
         let audioArray = buffer.samples
         let startTime = buffer.startTime
-        let endTime = buffer.lastChunkTime
         let duration = buffer.duration()
 
         pipelineLogger.info("Transcribing buffer for [\(speaker, privacy: .public)]: \(audioArray.count, privacy: .public) samples (\(String(format: "%.2f", duration), privacy: .public)s)")
@@ -189,6 +241,9 @@ public actor TranscriptionPipeline {
             }
             pipelineLogger.info("Transcription returned \(segments.count, privacy: .public) segments")
 
+            // Verify we're still the active generation before yielding
+            guard self.generation == gen, !Task.isCancelled else { return }
+
             // Convert to transcript segments with speaker labels and language detection
             for segment in segments {
                 pipelineLogger.info("Segment: \"\(segment.text, privacy: .public)\" [\(String(format: "%.2f", segment.startTime), privacy: .public) - \(String(format: "%.2f", segment.endTime), privacy: .public)]")
@@ -209,8 +264,9 @@ public actor TranscriptionPipeline {
     }
 
     private func flushAllBuffers() async {
+        let gen = generation
         for speaker in buffers.keys {
-            await transcribeBuffer(speaker: speaker)
+            await transcribeBuffer(speaker: speaker, generation: gen)
         }
     }
 
@@ -221,9 +277,17 @@ public actor TranscriptionPipeline {
     /// Stop pipeline and flush buffered audio
     public func stop() async {
         isRunning = false
+
+        // Cancel the processing task so it exits the for-await loop
+        processingTask?.cancel()
+        processingTask = nil
+
+        // Flush remaining buffers
         await flushAllBuffers()
         continuation?.finish()
         continuation = nil
+        buffers.removeAll()
+        activeTranscriptions.removeAll()
     }
 
     /// Convert Float32 audio samples to WAV format Data for cloud STT
