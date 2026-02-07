@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import os.log
 
@@ -42,13 +42,19 @@ public enum AudioFileImportError: Error, LocalizedError, Sendable {
 /// Validates and reads metadata from audio files without loading full audio into memory
 public struct AudioFileImporter: Sendable {
 
-    /// Formats natively supported by AVFoundation on macOS
-    public static let supportedFormats: [String] = ["mp3", "wav", "m4a", "mp4", "aiff", "caf", "flac"]
+    /// Audio formats natively supported by AVFoundation on macOS
+    public static let supportedAudioFormats: [String] = ["mp3", "wav", "m4a", "aiff", "caf", "flac"]
+
+    /// Video formats from which audio can be extracted via AVAsset
+    public static let supportedVideoFormats: [String] = ["mp4", "mov", "mkv", "webm"]
+
+    /// All supported formats (audio + video)
+    public static let supportedFormats: [String] = supportedAudioFormats + supportedVideoFormats
 
     public init() {}
 
-    /// Validate and read metadata from an audio file
-    /// - Parameter url: File URL of the audio file
+    /// Validate and read metadata from an audio or video file
+    /// - Parameter url: File URL of the audio/video file
     /// - Returns: AudioFileInfo with duration, sample rate, channel count, and format
     /// - Throws: AudioFileImportError if file is missing, unsupported, or unreadable
     public func importFile(url: URL) async throws -> AudioFileInfo {
@@ -62,6 +68,10 @@ public struct AudioFileImporter: Sendable {
         guard FileManager.default.fileExists(atPath: url.path) else {
             importLogger.error("File not found: \(url.path, privacy: .public)")
             throw AudioFileImportError.fileNotFound(url)
+        }
+
+        if Self.supportedVideoFormats.contains(fileExtension) {
+            return try await importVideoFile(url: url, fileExtension: fileExtension)
         }
 
         do {
@@ -85,5 +95,40 @@ public struct AudioFileImporter: Sendable {
             importLogger.error("Failed to read audio file: \(error.localizedDescription, privacy: .public)")
             throw AudioFileImportError.unableToReadFile(error.localizedDescription)
         }
+    }
+
+    private func importVideoFile(url: URL, fileExtension: String) async throws -> AudioFileInfo {
+        let asset = AVAsset(url: url)
+        let duration = try await asset.load(.duration)
+        let durationSeconds = CMTimeGetSeconds(duration)
+
+        guard durationSeconds > 0, durationSeconds.isFinite else {
+            throw AudioFileImportError.unableToReadFile("Could not determine duration")
+        }
+
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        guard let audioTrack = audioTracks.first else {
+            throw AudioFileImportError.unableToReadFile("No audio track found in video")
+        }
+
+        let descriptions = try await audioTrack.load(.formatDescriptions)
+        var sampleRate: Double = 44100
+        var channelCount = 1
+        if let desc = descriptions.first {
+            if let basicDesc = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
+                sampleRate = basicDesc.pointee.mSampleRate
+                channelCount = Int(basicDesc.pointee.mChannelsPerFrame)
+            }
+        }
+
+        importLogger.info("Imported video \(fileExtension, privacy: .public): \(String(format: "%.1f", durationSeconds), privacy: .public)s, \(sampleRate, privacy: .public)Hz, \(channelCount, privacy: .public)ch")
+
+        return AudioFileInfo(
+            fileURL: url,
+            duration: durationSeconds,
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            format: fileExtension
+        )
     }
 }

@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import os.log
 
@@ -95,12 +95,20 @@ public actor RecordingPlaybackService: RecordingPlaybackProtocol {
 
     public init() {}
 
-    /// Load an audio file for playback
+    /// Load an audio or video file for playback.
+    /// Video files are first converted to a temporary WAV so AVAudioFile can read them.
     public func loadFile(url: URL) async throws {
         let importer = AudioFileImporter()
         let info = try await importer.importFile(url: url)
 
-        let file = try AVAudioFile(forReading: url)
+        let playableURL: URL
+        if AudioFileImporter.supportedVideoFormats.contains(url.pathExtension.lowercased()) {
+            playableURL = try await extractAudioFromVideo(url: url)
+        } else {
+            playableURL = url
+        }
+
+        let file = try AVAudioFile(forReading: playableURL)
         self.audioFile = file
         self.fileInfo = info
         self.playbackStartFrame = 0
@@ -108,6 +116,41 @@ public actor RecordingPlaybackService: RecordingPlaybackProtocol {
         self.state = .loaded
 
         playbackLogger.info("Loaded file: \(url.lastPathComponent, privacy: .public), duration: \(String(format: "%.1f", info.duration), privacy: .public)s")
+    }
+
+    /// Extract audio track from a video file into a temporary WAV file.
+    private func extractAudioFromVideo(url: URL) async throws -> URL {
+        let asset = AVAsset(url: url)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        guard !audioTracks.isEmpty else {
+            throw RecordingPlaybackError.engineStartFailed("No audio track in video")
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+            throw RecordingPlaybackError.engineStartFailed("Failed to create export session")
+        }
+
+        // Use m4a for lossless extraction (WAV export not directly supported by AVAssetExportSession)
+        let m4aURL = tempDir.appendingPathComponent(UUID().uuidString + ".m4a")
+        exportSession.outputURL = m4aURL
+        exportSession.outputFileType = .m4a
+
+        await exportSession.export()
+
+        guard exportSession.status == .completed else {
+            let errorMsg = exportSession.error?.localizedDescription ?? "unknown error"
+            throw RecordingPlaybackError.engineStartFailed("Audio extraction failed: \(errorMsg)")
+        }
+
+        // If m4a works directly with AVAudioFile, use it
+        if (try? AVAudioFile(forReading: m4aURL)) != nil {
+            return m4aURL
+        }
+
+        // Fallback: return original URL and let AVAudioFile try
+        return url
     }
 
     /// Start playback and return a stream of audio chunks for the transcription pipeline

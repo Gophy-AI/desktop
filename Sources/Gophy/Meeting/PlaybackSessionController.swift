@@ -36,7 +36,7 @@ public actor PlaybackSessionController {
     }
 
     /// Start playback session from audio file
-    public func startPlayback(fileURL: URL, title: String) async throws {
+    public func startPlayback(fileURL: URL, title: String, existingMeetingId: String? = nil) async throws {
         logger.info("Starting playback: \(title, privacy: .public)")
 
         guard currentStatus == .idle || currentStatus == .completed else {
@@ -45,19 +45,23 @@ public actor PlaybackSessionController {
 
         updateStatus(.starting)
 
-        // Create meeting record with mode="playback"
-        let meetingId = UUID().uuidString
-        let meeting = MeetingRecord(
-            id: meetingId,
-            title: title,
-            startedAt: Date(),
-            endedAt: nil,
-            mode: "playback",
-            status: "active",
-            createdAt: Date(),
-            sourceFilePath: fileURL.path
-        )
-        try await meetingRepository.create(meeting)
+        let meetingId: String
+        if let existingId = existingMeetingId {
+            meetingId = existingId
+        } else {
+            meetingId = UUID().uuidString
+            let meeting = MeetingRecord(
+                id: meetingId,
+                title: title,
+                startedAt: Date(),
+                endedAt: nil,
+                mode: "playback",
+                status: "active",
+                createdAt: Date(),
+                sourceFilePath: fileURL.path
+            )
+            try await meetingRepository.create(meeting)
+        }
         currentMeetingId = meetingId
 
         // Load audio file

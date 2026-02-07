@@ -1,3 +1,4 @@
+@preconcurrency import AVFoundation
 import Foundation
 import SwiftUI
 import os.log
@@ -23,6 +24,8 @@ public final class PlaybackMeetingViewModel {
     public var speakerCount: Int = 0
     public var errorMessage: String?
     public var isGeneratingSuggestion = false
+    public var isTranscribingAll = false
+    public var transcribeAllProgress: Double = 0
     public var speakerLabels: [String: SpeakerLabelInfo] = [:]
 
     let fileURL: URL
@@ -70,7 +73,7 @@ public final class PlaybackMeetingViewModel {
 
     public func startPlayback() async {
         do {
-            try await sessionController.startPlayback(fileURL: fileURL, title: title)
+            try await sessionController.startPlayback(fileURL: fileURL, title: title, existingMeetingId: meetingRecord.id)
             duration = await sessionController.playbackService.duration
             startProgressTimer()
         } catch {
@@ -182,6 +185,125 @@ public final class PlaybackMeetingViewModel {
         }
     }
 
+    // MARK: - Batch Transcription
+
+    public func transcribeAll() async {
+        guard !isTranscribingAll else { return }
+        isTranscribingAll = true
+        transcribeAllProgress = 0
+        defer { isTranscribingAll = false }
+
+        do {
+            // Read the entire audio file
+            let audioData = try AVAudioFileReader.readSamples(from: fileURL)
+            let samples = audioData.samples
+            let sampleRate = audioData.sampleRate
+
+            // Resample to 16kHz if needed
+            let targetRate = 16000
+            let processedSamples: [Float]
+            if sampleRate != targetRate {
+                let ratio = Double(targetRate) / Double(sampleRate)
+                let targetLength = Int(Double(samples.count) * ratio)
+                var resampled = [Float]()
+                resampled.reserveCapacity(targetLength)
+                for i in 0..<targetLength {
+                    let srcIdx = Double(i) / ratio
+                    let idx = Int(srcIdx)
+                    let frac = Float(srcIdx - Double(idx))
+                    if idx + 1 < samples.count {
+                        resampled.append(samples[idx] * (1 - frac) + samples[idx + 1] * frac)
+                    } else if idx < samples.count {
+                        resampled.append(samples[idx])
+                    }
+                }
+                processedSamples = resampled
+            } else {
+                processedSamples = samples
+            }
+
+            // Process in 30-second chunks (WhisperKit optimal window)
+            let chunkDuration = 30
+            let chunkSize = targetRate * chunkDuration
+            let totalChunks = max(1, (processedSamples.count + chunkSize - 1) / chunkSize)
+
+            // Load transcription engine
+            let transcriptionEngine = TranscriptionEngine()
+            if !transcriptionEngine.isLoaded {
+                try await transcriptionEngine.load()
+            }
+
+            let languagePref = UserDefaults.standard.string(forKey: "languagePreference")
+            let language = (languagePref == nil || languagePref == "auto") ? nil : languagePref
+
+            // Clear existing segments for this meeting
+            transcriptSegments.removeAll()
+
+            for chunkIndex in 0..<totalChunks {
+                let start = chunkIndex * chunkSize
+                let end = min(start + chunkSize, processedSamples.count)
+                let chunk = Array(processedSamples[start..<end])
+
+                let segments = try await transcriptionEngine.transcribe(
+                    audioArray: chunk,
+                    sampleRate: targetRate,
+                    language: language
+                )
+
+                let chunkStartTime = Double(start) / Double(targetRate)
+
+                for segment in segments where !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let record = TranscriptSegmentRecord(
+                        id: UUID().uuidString,
+                        meetingId: meetingRecord.id,
+                        text: segment.text,
+                        speaker: "Speaker",
+                        startTime: chunkStartTime + segment.startTime,
+                        endTime: chunkStartTime + segment.endTime,
+                        createdAt: Date()
+                    )
+                    transcriptSegments.append(record)
+
+                    try await meetingRepository.addTranscriptSegment(record)
+
+                    // Assign speaker color
+                    let speaker = record.speaker
+                    if speakerLabels[speaker] == nil {
+                        let colorIndex = speakerLabels.count % Self.speakerColors.count
+                        speakerLabels[speaker] = SpeakerLabelInfo(
+                            originalLabel: speaker,
+                            displayLabel: speaker,
+                            color: Self.speakerColors[colorIndex]
+                        )
+                    }
+                }
+
+                transcribeAllProgress = Double(chunkIndex + 1) / Double(totalChunks)
+            }
+
+            // Update meeting status
+            let updated = MeetingRecord(
+                id: meetingRecord.id,
+                title: meetingRecord.title,
+                startedAt: meetingRecord.startedAt,
+                endedAt: meetingRecord.endedAt ?? Date(),
+                mode: meetingRecord.mode,
+                status: "completed",
+                createdAt: meetingRecord.createdAt,
+                sourceFilePath: meetingRecord.sourceFilePath,
+                speakerCount: speakerLabels.count,
+                calendarEventId: meetingRecord.calendarEventId,
+                calendarTitle: meetingRecord.calendarTitle
+            )
+            try await meetingRepository.update(updated)
+
+            logger.info("Transcribe all completed: \(self.transcriptSegments.count) segments")
+        } catch {
+            errorMessage = "Transcription failed: \(error.localizedDescription)"
+            logger.error("Transcribe all failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // MARK: - Data Loading
 
     func loadExistingData() async {
@@ -220,6 +342,7 @@ public final class PlaybackMeetingViewModel {
     private func handleEvent(_ event: MeetingEvent) async {
         switch event {
         case .transcriptSegment(let segment):
+            guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { break }
             let record = TranscriptSegmentRecord(
                 id: UUID().uuidString,
                 meetingId: meetingRecord.id,

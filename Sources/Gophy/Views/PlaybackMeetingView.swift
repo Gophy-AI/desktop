@@ -113,6 +113,29 @@ struct PlaybackMeetingView: View {
 
             Spacer()
 
+            if viewModel.isTranscribingAll {
+                HStack(spacing: 8) {
+                    SwiftUI.ProgressView(value: viewModel.transcribeAllProgress)
+                        .frame(width: 100)
+                    Text("\(Int(viewModel.transcribeAllProgress * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            } else {
+                Button {
+                    Task { await viewModel.transcribeAll() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "text.badge.checkmark")
+                        Text("Transcribe All")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.status == .active)
+                .help("Transcribe the entire recording without playback")
+            }
+
             statusBadge
         }
         .padding()
