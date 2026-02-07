@@ -24,8 +24,12 @@ public final class EmbeddingEngine: @unchecked Sendable {
     public func load() async throws {
         logger.info("Loading embedding engine...")
 
-        // Get embedding model configuration from registry
-        guard let embeddingModel = modelRegistry.availableModels().first(where: { $0.type == .embedding }) else {
+        // Get embedding model configuration from registry using user selection
+        let selectedId = UserDefaults.standard.string(forKey: "selectedEmbeddingModelId") ?? "multilingual-e5-small"
+        let embeddingModels = modelRegistry.availableModels().filter { $0.type == .embedding }
+
+        guard let embeddingModel = embeddingModels.first(where: { $0.id == selectedId })
+                ?? embeddingModels.first else {
             logger.error("No embedding model configured")
             throw EmbeddingError.noModelAvailable
         }

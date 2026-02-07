@@ -158,8 +158,13 @@ public final class ModeController: @unchecked Sendable {
         let embeddingIsCloud = providerRegistry?.isCloudProvider(for: .embedding) ?? false
 
         // Only load embedding engine if using local provider and model is downloaded
+        let selectedEmbeddingId = UserDefaults.standard.string(forKey: "selectedEmbeddingModelId") ?? "multilingual-e5-small"
+        let embeddingModels = modelRegistry.availableModels().filter { $0.type == .embedding }
+        let embeddingModel = embeddingModels.first(where: { $0.id == selectedEmbeddingId })
+            ?? embeddingModels.first
+
         if !embeddingIsCloud,
-           let embeddingModel = modelRegistry.availableModels().first(where: { $0.type == .embedding }),
+           let embeddingModel,
            modelRegistry.isDownloaded(embeddingModel),
            !embeddingEngine.isLoaded {
             modeLogger.info("Loading embedding engine...")

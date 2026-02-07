@@ -1,8 +1,11 @@
 import Foundation
+import os
 @preconcurrency import CoreImage
 import AppKit
 import MLXVLM
 import MLXLMCommon
+
+private let ocrLogger = Logger(subsystem: "com.gophy.app", category: "OCREngine")
 
 public protocol OCREngineProtocol: Sendable {
     var isLoaded: Bool { get async }
@@ -41,23 +44,49 @@ public actor OCREngine: OCREngineProtocol {
 
     public func load() async throws {
         guard currentState.isUnloaded else {
+            ocrLogger.debug("load() called but state is not unloaded, skipping")
             return
         }
 
         currentState = .loading
+        ocrLogger.info("OCR engine loading started")
 
         do {
-            guard let ocrModel = modelRegistry.availableModels().first(where: { $0.type == .ocr }) else {
+            let selectedId = UserDefaults.standard.string(forKey: "selectedOCRModelId") ?? "qwen2.5-vl-7b-instruct-4bit"
+            let ocrModels = modelRegistry.availableModels().filter { $0.type == .ocr }
+
+            guard let ocrModel = ocrModels.first(where: { $0.id == selectedId && modelRegistry.isDownloaded($0) })
+                    ?? ocrModels.first(where: { modelRegistry.isDownloaded($0) })
+                    ?? ocrModels.first else {
+                ocrLogger.error("No OCR model found in registry")
                 throw OCRError.noModelAvailable
             }
 
-            let modelPath = modelRegistry.downloadPath(for: ocrModel)
-            let configuration = ModelConfiguration(directory: modelPath)
+            ocrLogger.info("OCR model found: id=\(ocrModel.id) hf=\(ocrModel.huggingFaceID)")
+
+            let isDownloaded = modelRegistry.isDownloaded(ocrModel)
+            let downloadPath = modelRegistry.downloadPath(for: ocrModel)
+            ocrLogger.info("isDownloaded=\(isDownloaded) downloadPath=\(downloadPath.path)")
+
+            guard isDownloaded else {
+                ocrLogger.error("OCR model not downloaded at \(downloadPath.path)")
+                throw OCRError.modelNotDownloaded
+            }
+
+            // Log directory contents
+            if let contents = try? FileManager.default.contentsOfDirectory(atPath: downloadPath.path) {
+                ocrLogger.info("Model directory contents (\(contents.count) files): \(contents.joined(separator: ", "))")
+            }
+
+            let configuration = ModelConfiguration(directory: downloadPath)
+            ocrLogger.info("Loading model container from \(downloadPath.path)")
 
             modelContainer = try await loadModelContainer(configuration: configuration)
             currentState = .ready
+            ocrLogger.info("OCR engine loaded successfully")
         } catch {
             currentState = .error(error)
+            ocrLogger.error("OCR engine load failed: \(error)")
             throw error
         }
     }
@@ -72,11 +101,15 @@ public actor OCREngine: OCREngineProtocol {
     }
 
     private func performExtraction(with image: CIImage) async throws -> String {
+        ocrLogger.info("performExtraction called, state=\(String(describing: self.currentState))")
+
         guard currentState.isReady else {
+            ocrLogger.error("performExtraction: engine not ready, state=\(String(describing: self.currentState))")
             throw OCRError.modelNotLoaded
         }
 
         guard let modelContainer else {
+            ocrLogger.error("performExtraction: modelContainer is nil")
             throw OCRError.modelNotLoaded
         }
 
@@ -129,6 +162,7 @@ public actor OCREngine: OCREngineProtocol {
 
 public enum OCRError: Error, Sendable {
     case modelNotLoaded
+    case modelNotDownloaded
     case noModelAvailable
     case invalidImage
     case processingFailed(String)
