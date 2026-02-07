@@ -8,7 +8,7 @@ struct LocalEmbeddingProviderTests {
     @Test("Conforms to EmbeddingProvider protocol")
     func testProtocolConformance() async {
         let mockEngine = StubEmbeddingEngine()
-        let provider: any EmbeddingProvider = LocalEmbeddingProvider(engine: mockEngine)
+        let provider: any EmbeddingProvider = LocalEmbeddingProvider(engine: mockEngine, dimensions: 384)
         _ = provider
     }
 
@@ -18,7 +18,7 @@ struct LocalEmbeddingProviderTests {
         mockEngine.simulateLoaded = true
         mockEngine.embeddingToReturn = [Float](repeating: 0.1, count: 384)
 
-        let provider = LocalEmbeddingProvider(engine: mockEngine)
+        let provider = LocalEmbeddingProvider(engine: mockEngine, dimensions: 384)
         let result = try await provider.embed(text: "test input")
 
         #expect(result.count == 384)
@@ -31,7 +31,7 @@ struct LocalEmbeddingProviderTests {
         mockEngine.simulateLoaded = true
         mockEngine.embeddingToReturn = [Float](repeating: 0.2, count: 384)
 
-        let provider = LocalEmbeddingProvider(engine: mockEngine)
+        let provider = LocalEmbeddingProvider(engine: mockEngine, dimensions: 384)
         let results = try await provider.embedBatch(texts: ["text1", "text2", "text3"])
 
         #expect(results.count == 3)
@@ -43,7 +43,7 @@ struct LocalEmbeddingProviderTests {
     @Test("Dimensions property returns correct value")
     func testDimensions() {
         let mockEngine = StubEmbeddingEngine()
-        let provider = LocalEmbeddingProvider(engine: mockEngine)
+        let provider = LocalEmbeddingProvider(engine: mockEngine, dimensions: 384)
         #expect(provider.dimensions == 384)
     }
 
@@ -52,7 +52,7 @@ struct LocalEmbeddingProviderTests {
         let mockEngine = StubEmbeddingEngine()
         mockEngine.simulateLoaded = false
 
-        let provider = LocalEmbeddingProvider(engine: mockEngine)
+        let provider = LocalEmbeddingProvider(engine: mockEngine, dimensions: 384)
 
         do {
             _ = try await provider.embed(text: "test")
@@ -75,6 +75,7 @@ final class StubEmbeddingEngine: EmbeddingCapable, @unchecked Sendable {
     var embeddingToReturn: [Float] = [Float](repeating: 0, count: 384)
 
     var isLoaded: Bool { simulateLoaded }
+    var embeddingDimension: Int = 384
 
     func load() async throws {
         loadCalled = true

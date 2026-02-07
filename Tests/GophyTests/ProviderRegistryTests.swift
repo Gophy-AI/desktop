@@ -271,6 +271,7 @@ final class StubTextGenerationEngineForRegistry: TextGenerationEngineProtocol, @
 
 final class StubEmbeddingEngineForRegistry: EmbeddingEngineProtocol, @unchecked Sendable {
     var isLoaded: Bool = false
+    var embeddingDimension: Int = 384
     func load() async throws { isLoaded = true }
     func unload() { isLoaded = false }
 }

@@ -3,6 +3,9 @@
 import Foundation
 import Hub
 import Tokenizers
+import os
+
+private let factoryLogger = Logger(subsystem: "com.gophy.app", category: "ModelFactory")
 
 public enum ModelFactoryError: LocalizedError {
     case unsupportedModelType(String)
@@ -293,13 +296,17 @@ public func loadModelContainer(
 
 private func load<R>(loader: (ModelFactory) async throws -> sending R) async throws -> sending R {
     let factories = ModelFactoryRegistry.shared.modelFactories()
+    factoryLogger.info("ModelFactory.load: trying \(factories.count, privacy: .public) factories")
     var firstMeaningfulError: Error?
     var lastError: Error?
-    for factory in factories {
+    for (index, factory) in factories.enumerated() {
+        factoryLogger.info("ModelFactory.load: trying factory[\(index, privacy: .public)] = \(String(describing: type(of: factory)), privacy: .public)")
         do {
             let model = try await loader(factory)
+            factoryLogger.info("ModelFactory.load: factory[\(index, privacy: .public)] succeeded")
             return model
         } catch let error as ModelFactoryError {
+            factoryLogger.warning("ModelFactory.load: factory[\(index, privacy: .public)] failed with ModelFactoryError: \(error.localizedDescription ?? "unknown", privacy: .public)")
             if case .unsupportedModelType = error {
                 lastError = error
             } else {
@@ -309,6 +316,7 @@ private func load<R>(loader: (ModelFactory) async throws -> sending R) async thr
                 lastError = error
             }
         } catch {
+            factoryLogger.warning("ModelFactory.load: factory[\(index, privacy: .public)] failed: \(error.localizedDescription, privacy: .public)")
             if firstMeaningfulError == nil {
                 firstMeaningfulError = error
             }
@@ -317,10 +325,13 @@ private func load<R>(loader: (ModelFactory) async throws -> sending R) async thr
     }
 
     if let firstMeaningfulError {
+        factoryLogger.error("ModelFactory.load: all factories failed, throwing firstMeaningfulError: \(firstMeaningfulError.localizedDescription, privacy: .public)")
         throw firstMeaningfulError
     } else if let lastError {
+        factoryLogger.error("ModelFactory.load: all factories failed, throwing lastError: \(lastError.localizedDescription, privacy: .public)")
         throw lastError
     } else {
+        factoryLogger.error("ModelFactory.load: no model factories available")
         throw ModelFactoryError.noModelFactoryAvailable
     }
 }

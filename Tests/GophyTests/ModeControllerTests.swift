@@ -274,6 +274,7 @@ final class MockEmbeddingEngine: EmbeddingEngineProtocol, @unchecked Sendable {
     var loadCalled = false
     var unloadCalled = false
     var isLoaded = false
+    var embeddingDimension: Int = 384
 
     func load() async throws {
         loadCalled = true
