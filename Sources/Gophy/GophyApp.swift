@@ -33,11 +33,6 @@ struct GophyApp: App {
                     selectedItem = .meetings
                 }
                 .keyboardShortcut("n", modifiers: .command)
-
-                Button("Import Recording") {
-                    selectedItem = .recordings
-                }
-                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
         }
 
@@ -101,18 +96,15 @@ struct ContentView: View {
                     selectedItem = .meetings
                     return nil
                 case "2":
-                    selectedItem = .recordings
-                    return nil
-                case "3":
                     selectedItem = .documents
                     return nil
-                case "4":
+                case "3":
                     selectedItem = .chat
                     return nil
-                case "5":
+                case "4":
                     selectedItem = .models
                     return nil
-                case "6":
+                case "5":
                     selectedItem = .settings
                     return nil
                 case ",":

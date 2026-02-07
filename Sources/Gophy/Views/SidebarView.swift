@@ -2,7 +2,6 @@ import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case meetings = "Meetings"
-    case recordings = "Recordings"
     case documents = "Documents"
     case chat = "Chat"
     case models = "Models"
@@ -14,8 +13,6 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .meetings:
             return "person.3"
-        case .recordings:
-            return "waveform"
         case .documents:
             return "doc.text"
         case .chat:

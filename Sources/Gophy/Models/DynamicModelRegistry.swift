@@ -135,20 +135,20 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
 
     public func isDownloaded(_ model: ModelDefinition) -> Bool {
         let primaryPath = downloadPath(for: model)
-        logger.info("isDownloaded(\(model.id)): checking primary=\(primaryPath.path)")
+        logger.info("isDownloaded(\(model.id, privacy: .public)): checking primary=\(primaryPath.path, privacy: .public)")
 
         if isModelAt(primaryPath) {
-            logger.info("isDownloaded(\(model.id)): found at primary path")
+            logger.info("isDownloaded(\(model.id, privacy: .public)): found at primary path")
             return true
         }
         if let altPath = alternativeDownloadPath(for: model) {
-            logger.info("isDownloaded(\(model.id)): checking alt=\(altPath.path)")
+            logger.info("isDownloaded(\(model.id, privacy: .public)): checking alt=\(altPath.path, privacy: .public)")
             if isModelAt(altPath) {
-                logger.info("isDownloaded(\(model.id)): found at alternative path")
+                logger.info("isDownloaded(\(model.id, privacy: .public)): found at alternative path")
                 return true
             }
         }
-        logger.warning("isDownloaded(\(model.id)): NOT FOUND at any path")
+        logger.warning("isDownloaded(\(model.id, privacy: .public)): NOT FOUND at any path")
         return false
     }
 
@@ -181,7 +181,7 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
     private func isModelAt(_ path: URL) -> Bool {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: path.path) else {
-            logger.debug("isModelAt: directory does not exist: \(path.path)")
+            logger.info("isModelAt: directory does not exist: \(path.path, privacy: .public)")
             return false
         }
         do {
@@ -190,13 +190,42 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 includingPropertiesForKeys: nil,
                 options: .skipsHiddenFiles
             )
+            let fileNames = contents.map { $0.lastPathComponent }
+            logger.info("isModelAt: \(path.lastPathComponent, privacy: .public) top-level (\(contents.count, privacy: .public) items): \(fileNames.joined(separator: ", "), privacy: .public)")
+
+            // Check top-level first
             let hasWeights = contents.contains { url in
                 url.pathExtension == "safetensors" || url.pathExtension == "mlmodelc"
             }
-            logger.debug("isModelAt: \(path.path) has \(contents.count) files, hasWeights=\(hasWeights)")
-            return hasWeights
+            if hasWeights {
+                logger.info("isModelAt: found weights at top level")
+                return true
+            }
+
+            // Check one level of subdirectories (HuggingFace snapshot structure)
+            for url in contents {
+                var isDir: ObjCBool = false
+                if fileManager.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                    if let subContents = try? fileManager.contentsOfDirectory(
+                        at: url,
+                        includingPropertiesForKeys: nil,
+                        options: .skipsHiddenFiles
+                    ) {
+                        let subHasWeights = subContents.contains { subUrl in
+                            subUrl.pathExtension == "safetensors" || subUrl.pathExtension == "mlmodelc"
+                        }
+                        if subHasWeights {
+                            logger.info("isModelAt: found weights in subdirectory \(url.lastPathComponent, privacy: .public)")
+                            return true
+                        }
+                    }
+                }
+            }
+
+            logger.info("isModelAt: no weights found at \(path.lastPathComponent, privacy: .public)")
+            return false
         } catch {
-            logger.error("isModelAt: failed to list directory \(path.path): \(error)")
+            logger.error("isModelAt: failed to list directory \(path.path, privacy: .public): \(error, privacy: .public)")
             return false
         }
     }

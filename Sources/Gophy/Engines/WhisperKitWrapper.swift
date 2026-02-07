@@ -28,8 +28,12 @@ public final class WhisperKitWrapper: WhisperKitProtocol, @unchecked Sendable {
         self.whisperKit = try await WhisperKit(modelFolder: modelFolder)
     }
 
-    public func transcribe(audioArray: [Float]) async throws -> [WhisperResultProtocol] {
-        let results = try await whisperKit.transcribe(audioArray: audioArray)
+    public func transcribe(audioArray: [Float], language: String? = nil) async throws -> [WhisperResultProtocol] {
+        var options = DecodingOptions()
+        if let language = language {
+            options.language = language
+        }
+        let results = try await whisperKit.transcribe(audioArray: audioArray, decodeOptions: options)
         return results.map { WhisperResultWrapper(result: $0) }
     }
 }

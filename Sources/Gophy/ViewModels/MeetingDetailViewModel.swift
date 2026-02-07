@@ -8,7 +8,9 @@ public final class MeetingDetailViewModel {
     private let chatMessageRepository: ChatMessageRepository
     private let writebackService: (any MeetingSummaryWritebackProtocol)?
 
-    public let meeting: MeetingRecord
+    public private(set) var meeting: MeetingRecord
+    public var meetingDate: Date
+    private var isUpdatingDate = false
     public var transcriptSegments: [TranscriptSegmentRecord] = []
     public var suggestions: [ChatMessageRecord] = []
     public var errorMessage: String?
@@ -28,6 +30,7 @@ public final class MeetingDetailViewModel {
         writebackService: (any MeetingSummaryWritebackProtocol)? = nil
     ) {
         self.meeting = meeting
+        self.meetingDate = meeting.startedAt
         self.meetingRepository = meetingRepository
         self.chatMessageRepository = chatMessageRepository
         self.writebackService = writebackService
@@ -72,6 +75,39 @@ public final class MeetingDetailViewModel {
 
     public func suggestionCount() -> Int {
         return suggestions.count
+    }
+
+    public var isImportedRecording: Bool {
+        meeting.mode == "playback"
+    }
+
+    public func updateMeetingDate(_ newDate: Date) async {
+        guard !isUpdatingDate else { return }
+        isUpdatingDate = true
+        defer { isUpdatingDate = false }
+
+        let duration = meeting.endedAt.map { $0.timeIntervalSince(meeting.startedAt) } ?? 0
+        let updated = MeetingRecord(
+            id: meeting.id,
+            title: meeting.title,
+            startedAt: newDate,
+            endedAt: newDate.addingTimeInterval(duration),
+            mode: meeting.mode,
+            status: meeting.status,
+            createdAt: meeting.createdAt,
+            sourceFilePath: meeting.sourceFilePath,
+            speakerCount: meeting.speakerCount,
+            calendarEventId: meeting.calendarEventId,
+            calendarTitle: meeting.calendarTitle
+        )
+
+        do {
+            try await meetingRepository.update(updated)
+            meeting = updated
+        } catch {
+            errorMessage = "Failed to update meeting date: \(error.localizedDescription)"
+            meetingDate = meeting.startedAt
+        }
     }
 
     public func writeSummaryToCalendar() async {

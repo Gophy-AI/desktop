@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol WhisperKitProtocol: Sendable {
-    func transcribe(audioArray: [Float]) async throws -> [WhisperResultProtocol]
+    func transcribe(audioArray: [Float], language: String?) async throws -> [WhisperResultProtocol]
 }
 
 public protocol WhisperResultProtocol: Sendable {

@@ -69,9 +69,22 @@ struct MeetingDetailView: View {
             }
 
             HStack(spacing: 20) {
-                Label(viewModel.formatDate(), systemImage: "calendar")
+                if viewModel.isImportedRecording {
+                    DatePicker(
+                        "Meeting Date",
+                        selection: $viewModel.meetingDate,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .labelsHidden()
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .onChange(of: viewModel.meetingDate) { _, newDate in
+                        Task { await viewModel.updateMeetingDate(newDate) }
+                    }
+                } else {
+                    Label(viewModel.formatDate(), systemImage: "calendar")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
 
                 Label(viewModel.formatDuration(), systemImage: "clock")
                     .font(.subheadline)

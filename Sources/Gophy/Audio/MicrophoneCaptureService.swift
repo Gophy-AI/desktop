@@ -1,5 +1,8 @@
 import AVFoundation
 import Foundation
+import os.log
+
+private let audioLogger = Logger(subsystem: "com.gophy.app", category: "MicrophoneCapture")
 
 /// Protocol for audio capture to enable testability
 protocol AudioCaptureProtocol: Actor {
@@ -27,8 +30,10 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
 
     /// Start capturing audio from the microphone
     public nonisolated func start() -> AsyncStream<AudioChunk> {
-        AsyncStream { [weak self] continuation in
+        audioLogger.info("Starting microphone capture...")
+        return AsyncStream { [weak self] continuation in
             guard let self = self else {
+                audioLogger.error("Self is nil, finishing")
                 continuation.finish()
                 return
             }
@@ -38,7 +43,9 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
                     await self.setContinuation(continuation)
                     try await self.setupAudioEngine()
                     try await self.startEngine()
+                    audioLogger.info("Microphone capture started successfully")
                 } catch {
+                    audioLogger.error("Failed to start microphone capture: \(error.localizedDescription, privacy: .public)")
                     continuation.finish()
                 }
             }
@@ -93,16 +100,22 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
     // MARK: - Private Methods
 
     private func setupAudioEngine() async throws {
+        audioLogger.info("Setting up audio engine...")
+
         // Request microphone permission
         #if os(macOS)
+        audioLogger.info("Requesting microphone permission...")
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
+        audioLogger.info("Microphone permission granted: \(granted, privacy: .public)")
         guard granted else {
+            audioLogger.error("Microphone permission denied")
             throw AudioCaptureError.permissionDenied
         }
         #endif
 
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        audioLogger.info("Input format: \(inputFormat.sampleRate, privacy: .public) Hz, \(inputFormat.channelCount, privacy: .public) channels")
 
         // Create target format: 16kHz, mono, float32
         guard let targetFormat = AVAudioFormat(
@@ -210,6 +223,7 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
                 source: .microphone
             )
 
+            audioLogger.info("Emitting audio chunk: \(chunkSamples.count, privacy: .public) samples")
             continuation.yield(chunk)
         }
     }

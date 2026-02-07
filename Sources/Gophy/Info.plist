@@ -26,5 +26,7 @@
     <string>Gophy</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Gophy accesses your calendar to show upcoming meetings, auto-start recording, and write meeting summaries.</string>
 </dict>
 </plist>

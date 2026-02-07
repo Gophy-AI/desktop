@@ -23,6 +23,7 @@ public protocol TextGenerationEngineProtocol: Sendable {
 
 public protocol EmbeddingEngineProtocol: Sendable {
     var isLoaded: Bool { get }
+    var embeddingDimension: Int { get }
     func load() async throws
     func unload()
 }

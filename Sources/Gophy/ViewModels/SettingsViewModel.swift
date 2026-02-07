@@ -33,6 +33,11 @@ public final class SettingsViewModel {
     var vadSensitivity: Double = 0.5
     var autoSuggestInterval: Double = 30.0
 
+    var inferenceMaxTokens: Double = 2048
+    var inferenceTemperature: Double = 0.7
+    var thinkingEnabled: Bool = true
+    var ocrMaxTokens: Double = 4096
+
     var databaseLocation: String
     var totalStorageGB: Double = 0.0
     var totalModelStorageGB: Double = 0.0
@@ -86,6 +91,7 @@ public final class SettingsViewModel {
     var lastCalendarSyncTime: Date?
     var isSyncingCalendar: Bool = false
     var eventKitAccessGranted: Bool = false
+    var googleClientID: String = ""
 
     private var deviceListenerTask: Task<Void, Never>?
 
@@ -158,6 +164,28 @@ public final class SettingsViewModel {
 
         if let savedEmbeddingModel = defaults.string(forKey: "selectedEmbeddingModelId") {
             selectedEmbeddingModelId = savedEmbeddingModel
+        }
+
+        let maxTokensValue = defaults.integer(forKey: "inference.maxTokens")
+        if maxTokensValue > 0 {
+            inferenceMaxTokens = Double(maxTokensValue)
+        }
+
+        let tempValue = defaults.double(forKey: "inference.temperature")
+        if tempValue > 0 {
+            inferenceTemperature = tempValue
+        }
+
+        let thinkingKey = "inference.thinkingEnabled"
+        if defaults.object(forKey: thinkingKey) != nil {
+            thinkingEnabled = defaults.bool(forKey: thinkingKey)
+        } else {
+            thinkingEnabled = true
+        }
+
+        let ocrMaxTokensValue = defaults.integer(forKey: "inference.ocrMaxTokens")
+        if ocrMaxTokensValue > 0 {
+            ocrMaxTokens = Double(ocrMaxTokensValue)
         }
     }
 
@@ -236,6 +264,26 @@ public final class SettingsViewModel {
         selectedEmbeddingModelId = modelId
         let defaults = UserDefaults.standard
         defaults.set(modelId, forKey: "selectedEmbeddingModelId")
+    }
+
+    func updateInferenceMaxTokens(_ value: Double) {
+        inferenceMaxTokens = value
+        UserDefaults.standard.set(Int(value), forKey: "inference.maxTokens")
+    }
+
+    func updateInferenceTemperature(_ value: Double) {
+        inferenceTemperature = value
+        UserDefaults.standard.set(value, forKey: "inference.temperature")
+    }
+
+    func updateThinkingEnabled(_ enabled: Bool) {
+        thinkingEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "inference.thinkingEnabled")
+    }
+
+    func updateOCRMaxTokens(_ value: Double) {
+        ocrMaxTokens = value
+        UserDefaults.standard.set(Int(value), forKey: "inference.ocrMaxTokens")
     }
 
     var availableTextGenModels: [ModelDefinition] {
@@ -370,20 +418,67 @@ public final class SettingsViewModel {
         let ekStatus = EKEventStore.authorizationStatus(for: .event)
         eventKitAccessGranted = (ekStatus == .authorized || ekStatus == .fullAccess)
 
+        if let savedClientID = defaults.string(forKey: "googleCalendarClientID"), !savedClientID.isEmpty {
+            googleClientID = savedClientID
+            ensureCalendarServices()
+        }
+
+        if eventKitService == nil {
+            eventKitService = EventKitService()
+        }
+
         Task {
             await refreshGoogleAuthStatus()
         }
     }
 
+    private func ensureCalendarServices() {
+        guard !googleClientID.isEmpty else { return }
+        if authService == nil {
+            let config = GoogleCalendarConfig(clientID: googleClientID)
+            let newAuthService = GoogleAuthService(config: config)
+            authService = newAuthService
+
+            if calendarSyncService == nil {
+                let ekService = eventKitService ?? EventKitService()
+                eventKitService = ekService
+                let apiClient = GoogleCalendarAPIClient(authService: newAuthService)
+                calendarSyncService = CalendarSyncService(
+                    apiClient: apiClient,
+                    eventKitService: ekService
+                )
+            }
+        }
+    }
+
+    func updateGoogleClientID(_ clientID: String) {
+        googleClientID = clientID
+        UserDefaults.standard.set(clientID, forKey: "googleCalendarClientID")
+        authService = nil
+        calendarSyncService = nil
+        if !clientID.isEmpty {
+            ensureCalendarServices()
+            Task {
+                await refreshGoogleAuthStatus()
+            }
+        } else {
+            isGoogleSignedIn = false
+            googleUserEmail = nil
+        }
+        calendarErrorMessage = nil
+    }
+
     private func refreshGoogleAuthStatus() async {
+        ensureCalendarServices()
         guard let authService = authService else { return }
         isGoogleSignedIn = await authService.isSignedIn
         googleUserEmail = await authService.userEmail
     }
 
     func signInGoogle() async {
+        ensureCalendarServices()
         guard let authService = authService else {
-            calendarErrorMessage = "Calendar service not configured"
+            calendarErrorMessage = "Enter a Google OAuth Client ID above to enable Google Calendar"
             return
         }
 
@@ -402,6 +497,7 @@ public final class SettingsViewModel {
     }
 
     func signOutGoogle() {
+        ensureCalendarServices()
         guard let authService = authService else { return }
 
         Task {
@@ -442,6 +538,7 @@ public final class SettingsViewModel {
     }
 
     func syncCalendarNow() async {
+        ensureCalendarServices()
         guard let syncService = calendarSyncService else { return }
 
         isSyncingCalendar = true
@@ -556,12 +653,33 @@ public final class SettingsViewModel {
         }
     }
 
+    private func defaultsKeys(for capability: ProviderCapability) -> (providerKey: String, modelKey: String) {
+        switch capability {
+        case .textGeneration:
+            return ("selectedTextGenProvider", "selectedTextGenModel")
+        case .embedding:
+            return ("selectedEmbeddingProvider", "selectedEmbeddingModel")
+        case .speechToText:
+            return ("selectedSTTProvider", "selectedSTTModel")
+        case .vision:
+            return ("selectedVisionProvider", "selectedVisionModel")
+        }
+    }
+
     func selectedProviderIdFor(_ capability: ProviderCapability) -> String {
-        providerRegistry?.selectedProviderId(for: capability) ?? "local"
+        if let registry = providerRegistry {
+            return registry.selectedProviderId(for: capability)
+        }
+        let (providerKey, _) = defaultsKeys(for: capability)
+        return UserDefaults.standard.string(forKey: providerKey) ?? "local"
     }
 
     func selectedModelIdFor(_ capability: ProviderCapability) -> String {
-        providerRegistry?.selectedModelId(for: capability) ?? ""
+        if let registry = providerRegistry {
+            return registry.selectedModelId(for: capability)
+        }
+        let (_, modelKey) = defaultsKeys(for: capability)
+        return UserDefaults.standard.string(forKey: modelKey) ?? ""
     }
 
     func availableCloudModels(for capability: ProviderCapability, providerId: String) -> [CloudModelDefinition] {
@@ -573,7 +691,13 @@ public final class SettingsViewModel {
     }
 
     func selectCloudProvider(for capability: ProviderCapability, providerId: String, modelId: String) {
-        providerRegistry?.selectProvider(for: capability, providerId: providerId, modelId: modelId)
+        if let registry = providerRegistry {
+            registry.selectProvider(for: capability, providerId: providerId, modelId: modelId)
+        } else {
+            let (providerKey, modelKey) = defaultsKeys(for: capability)
+            UserDefaults.standard.set(providerId, forKey: providerKey)
+            UserDefaults.standard.set(modelId, forKey: modelKey)
+        }
     }
 
     func saveProviderAPIKey(providerId: String, apiKey: String) {
@@ -605,11 +729,14 @@ public final class SettingsViewModel {
     }
 
     func testProviderConnection(providerId: String) async -> TestConnectionResult {
-        guard let registry = providerRegistry else {
-            return TestConnectionResult(isHealthy: false, message: "Provider registry not available")
+        let status: ProviderHealthStatus
+
+        if let registry = providerRegistry {
+            status = await registry.checkHealth(providerId: providerId)
+        } else {
+            status = await checkHealthDirectly(providerId: providerId)
         }
 
-        let status = await registry.checkHealth(providerId: providerId)
         switch status {
         case .healthy:
             return TestConnectionResult(isHealthy: true, message: "Connection successful")
@@ -620,8 +747,44 @@ public final class SettingsViewModel {
         }
     }
 
+    private func checkHealthDirectly(providerId: String) async -> ProviderHealthStatus {
+        guard providerId != "local" else {
+            return .healthy
+        }
+
+        let apiKey: String
+        do {
+            guard let retrieved = try keychainService.retrieve(for: providerId), !retrieved.isEmpty else {
+                return .unavailable("No API key configured")
+            }
+            apiKey = retrieved
+        } catch {
+            return .unavailable("Failed to retrieve API key")
+        }
+
+        if providerId == "anthropic" {
+            let provider = AnthropicProvider(apiKey: apiKey)
+            return await provider.healthCheck()
+        }
+
+        guard let config = ProviderCatalog.provider(id: providerId) else {
+            return .unavailable("Unknown provider: \(providerId)")
+        }
+
+        let firstTextModel = config.availableModels.first { $0.capability == .textGeneration }?.id
+        let firstEmbModel = config.availableModels.first { $0.capability == .embedding }?.id
+
+        let provider = OpenAICompatibleProvider(
+            providerId: config.id,
+            baseURL: config.baseURL,
+            apiKey: apiKey,
+            textGenModel: firstTextModel,
+            embeddingModel: firstEmbModel
+        )
+        return await provider.healthCheck()
+    }
+
     func isCloudProvider(for capability: ProviderCapability) -> Bool {
-        guard let registry = providerRegistry else { return false }
-        return registry.isCloudProvider(for: capability)
+        return selectedProviderIdFor(capability) != "local"
     }
 }

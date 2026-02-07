@@ -21,6 +21,7 @@ struct SettingsView: View {
                 AutomationSettingsView(viewModel: viewModel)
                 audioSection
                 modelsSection
+                inferenceSection
                 storageSection
                 generalSection
             }
@@ -270,6 +271,111 @@ struct SettingsView: View {
                     Text("Manage Models")
                 }
                 .buttonStyle(.bordered)
+            }
+        }
+        .padding()
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
+    }
+
+    private var inferenceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Inference")
+                .font(.headline)
+
+            Divider()
+
+            // Max Tokens
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Max Tokens (Chat)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text("\(Int(viewModel.inferenceMaxTokens))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $viewModel.inferenceMaxTokens, in: 256...8192, step: 256)
+                    .onChange(of: viewModel.inferenceMaxTokens) { _, newValue in
+                        viewModel.updateInferenceMaxTokens(newValue)
+                    }
+
+                Text("Maximum number of tokens the model generates for chat and suggestion responses")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            // Temperature
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Temperature")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text(String(format: "%.2f", viewModel.inferenceTemperature))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $viewModel.inferenceTemperature, in: 0.0...2.0, step: 0.05)
+                    .onChange(of: viewModel.inferenceTemperature) { _, newValue in
+                        viewModel.updateInferenceTemperature(newValue)
+                    }
+
+                Text("Lower values produce more focused responses, higher values more creative")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            // Thinking toggle
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Enable Thinking (Qwen3)", isOn: $viewModel.thinkingEnabled)
+                    .onChange(of: viewModel.thinkingEnabled) { _, newValue in
+                        viewModel.updateThinkingEnabled(newValue)
+                    }
+
+                Text("When enabled, Qwen3 models show their reasoning process in a collapsible bubble. Disable to skip thinking and get faster, shorter responses.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            // OCR Max Tokens
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Max Tokens (OCR)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text("\(Int(viewModel.ocrMaxTokens))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $viewModel.ocrMaxTokens, in: 1024...16384, step: 1024)
+                    .onChange(of: viewModel.ocrMaxTokens) { _, newValue in
+                        viewModel.updateOCRMaxTokens(newValue)
+                    }
+
+                Text("Maximum tokens for OCR text extraction from images and documents")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()

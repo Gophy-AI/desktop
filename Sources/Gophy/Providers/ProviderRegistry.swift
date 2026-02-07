@@ -298,7 +298,7 @@ public final class ProviderRegistry: @unchecked Sendable {
     private func buildLocalEmbeddingProvider() -> any EmbeddingProvider {
         let engine = embeddingEngine as? EmbeddingCapable
             ?? EmbeddingCapableAdapter(engine: embeddingEngine)
-        return LocalEmbeddingProvider(engine: engine)
+        return LocalEmbeddingProvider(engine: engine, dimensions: embeddingEngine.embeddingDimension)
     }
 
     private func buildLocalSTTProvider() -> any STTProvider {
@@ -355,6 +355,7 @@ private final class EmbeddingCapableAdapter: EmbeddingCapable, @unchecked Sendab
     private let _engine: any EmbeddingEngineProtocol
 
     var isLoaded: Bool { _engine.isLoaded }
+    var embeddingDimension: Int { _engine.embeddingDimension }
     func load() async throws { try await _engine.load() }
     func unload() { _engine.unload() }
 
