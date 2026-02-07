@@ -21,6 +21,7 @@ public final class SettingsViewModel {
     private let audioDeviceManager: AudioDeviceManager
     private let storageManager: StorageManager
     private let registry: ModelRegistryProtocol
+    private let keychainService: any KeychainServiceProtocol
     private var authService: GoogleAuthService?
     private var calendarSyncService: (any CalendarSyncServiceProtocol)?
     private var eventKitService: (any EventKitServiceProtocol)?
@@ -92,6 +93,7 @@ public final class SettingsViewModel {
         audioDeviceManager: AudioDeviceManager,
         storageManager: StorageManager,
         registry: ModelRegistryProtocol,
+        keychainService: any KeychainServiceProtocol = KeychainService(),
         authService: GoogleAuthService? = nil,
         calendarSyncService: (any CalendarSyncServiceProtocol)? = nil,
         eventKitService: (any EventKitServiceProtocol)? = nil
@@ -99,6 +101,7 @@ public final class SettingsViewModel {
         self.audioDeviceManager = audioDeviceManager
         self.storageManager = storageManager
         self.registry = registry
+        self.keychainService = keychainService
         self.authService = authService
         self.calendarSyncService = calendarSyncService
         self.eventKitService = eventKitService
@@ -109,6 +112,7 @@ public final class SettingsViewModel {
         calculateStorage()
         loadCalendarSettings()
         loadAutomationSettings()
+        refreshConfiguredProviders()
     }
 
 
@@ -535,8 +539,11 @@ public final class SettingsViewModel {
     }
 
     private func refreshConfiguredProviders() {
-        guard let registry = providerRegistry else { return }
-        configuredProviderIds = Set(registry.configuredProviders())
+        if let registry = providerRegistry {
+            configuredProviderIds = Set(registry.configuredProviders())
+        } else {
+            configuredProviderIds = Set((try? keychainService.listProviderIds()) ?? [])
+        }
     }
 
     func isProviderConfigured(_ providerId: String) -> Bool {
@@ -570,13 +577,12 @@ public final class SettingsViewModel {
     }
 
     func saveProviderAPIKey(providerId: String, apiKey: String) {
-        guard let registry = providerRegistry else {
-            providerErrorMessage = "Provider registry not configured"
-            return
-        }
-
         do {
-            try registry.configureProvider(id: providerId, apiKey: apiKey)
+            if let registry = providerRegistry {
+                try registry.configureProvider(id: providerId, apiKey: apiKey)
+            } else {
+                try keychainService.save(apiKey: apiKey, for: providerId)
+            }
             refreshConfiguredProviders()
             providerErrorMessage = nil
         } catch {
@@ -585,10 +591,12 @@ public final class SettingsViewModel {
     }
 
     func removeProviderAPIKey(providerId: String) {
-        guard let registry = providerRegistry else { return }
-
         do {
-            try registry.removeProvider(id: providerId)
+            if let registry = providerRegistry {
+                try registry.removeProvider(id: providerId)
+            } else {
+                try keychainService.delete(for: providerId)
+            }
             refreshConfiguredProviders()
             providerErrorMessage = nil
         } catch {

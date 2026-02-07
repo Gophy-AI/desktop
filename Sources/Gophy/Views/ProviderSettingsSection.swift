@@ -283,6 +283,16 @@ private struct ProviderDetailSheet: View {
                         .controlSize(.small)
                 }
 
+                if let errorMsg = viewModel.providerErrorMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(errorMsg)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 if let result = testResult {
                     HStack(spacing: 6) {
                         Circle()
