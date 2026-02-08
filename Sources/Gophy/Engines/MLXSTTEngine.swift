@@ -24,6 +24,7 @@ public enum MLXSTTModelType: String, Sendable {
     case qwen3ASR = "qwen3-asr"
     case wav2vec
     case voxtral
+    case voxtralRealtime = "voxtral-realtime"
 
     static func from(modelId: String) -> MLXSTTModelType? {
         let lowercased = modelId.lowercased()
@@ -35,6 +36,8 @@ public enum MLXSTTModelType: String, Sendable {
             return .qwen3ASR
         } else if lowercased.contains("wav2vec") {
             return .wav2vec
+        } else if lowercased.contains("voxtral") && lowercased.contains("realtime") {
+            return .voxtralRealtime
         } else if lowercased.contains("voxtral") {
             return .voxtral
         } else if lowercased.contains("whisper") {
@@ -131,6 +134,9 @@ public final class MLXSTTEngine: @unchecked Sendable {
         case .voxtral:
             let model = try await VoxtralModel.fromPretrained(repoID)
             return VoxtralModelWrapper(model: model)
+        case .voxtralRealtime:
+            let model = try await VoxtralRealtimeModel.fromPretrained(repoID)
+            return VoxtralRealtimeModelWrapper(model: model)
         }
     }
 }
@@ -235,6 +241,20 @@ public final class VoxtralModelWrapper: MLXSTTModelProtocol, @unchecked Sendable
         let audioMLX = MLXArray(audio)
         let lang = language ?? UserDefaults.standard.string(forKey: "languagePreference").flatMap({ AppLanguage(rawValue: $0)?.isoCode }) ?? "en"
         let output = model.generate(audio: audioMLX, maxTokens: maxTokens, temperature: temperature, language: lang)
+        return output.text
+    }
+}
+
+public final class VoxtralRealtimeModelWrapper: MLXSTTModelProtocol, @unchecked Sendable {
+    private let model: VoxtralRealtimeModel
+
+    public init(model: VoxtralRealtimeModel) {
+        self.model = model
+    }
+
+    public func transcribe(audio: [Float], maxTokens: Int, temperature: Float, language: String?) throws -> String {
+        let audioMLX = MLXArray(audio)
+        let output = model.generate(audio: audioMLX, maxTokens: maxTokens, temperature: temperature)
         return output.text
     }
 }

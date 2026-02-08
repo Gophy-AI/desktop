@@ -172,6 +172,15 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 approximateSizeGB: 6.0,
                 memoryUsageGB: 6.5,
                 source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "voxtral-mini-4b-realtime",
+                name: "Voxtral Mini 4B Realtime",
+                type: .stt,
+                huggingFaceID: "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
+                approximateSizeGB: 3.0,
+                memoryUsageGB: 4.0,
+                source: .audioRegistry
             )
         ])
 
