@@ -88,7 +88,7 @@ public final class MLXSTTEngine: @unchecked Sendable {
         }
 
         mlxSTTLogger.info("MLXSTTEngine.transcribe: processing \(audioArray.count, privacy: .public) samples")
-        let text = try model.transcribe(audio: audioArray, maxTokens: 256, temperature: 0.0, language: language)
+        let text = try model.transcribe(audio: audioArray, maxTokens: 4096, temperature: 0.0, language: language)
 
         guard !text.isEmpty else {
             return []

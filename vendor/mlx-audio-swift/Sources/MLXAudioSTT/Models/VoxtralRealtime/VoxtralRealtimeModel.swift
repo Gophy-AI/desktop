@@ -657,7 +657,7 @@ public class VoxtralRealtimeModel: Module {
     /// Generate transcription from audio.
     public func generate(
         audio: MLXArray,
-        maxTokens: Int = 1024,
+        maxTokens: Int = 4096,
         temperature: Float = 0.0
     ) -> STTOutput {
         guard let tokenizer = tokenizer else {
@@ -719,9 +719,12 @@ public class VoxtralRealtimeModel: Module {
         var y = sample(logits)
 
         // Autoregressive loop: for each position from prefixLen to N_audio
-        let maxPos = min(nAudio, prefixLen + maxTokens)
-        for pos in prefixLen..<maxPos {
+        // Process all audio positions by default, maxTokens acts as safety limit
+        for pos in prefixLen..<nAudio {
             if y == eosTokenId {
+                break
+            }
+            if outputTokens.count >= maxTokens {
                 break
             }
             outputTokens.append(y)
@@ -768,7 +771,7 @@ public class VoxtralRealtimeModel: Module {
     /// Generate transcription with streaming token output.
     public func generateStream(
         audio: MLXArray,
-        maxTokens: Int = 1024,
+        maxTokens: Int = 4096,
         temperature: Float = 0.0
     ) -> AsyncThrowingStream<STTGeneration, Error> {
         AsyncThrowingStream { continuation in
@@ -818,9 +821,12 @@ public class VoxtralRealtimeModel: Module {
                 var outputTokens: [Int] = []
                 var y = sample(logits)
 
-                let maxPos = min(nAudio, prefixLen + maxTokens)
-                for pos in prefixLen..<maxPos {
+                // Process all audio positions by default, maxTokens acts as safety limit
+                for pos in prefixLen..<nAudio {
                     if y == self.eosTokenId {
+                        break
+                    }
+                    if outputTokens.count >= maxTokens {
                         break
                     }
                     outputTokens.append(y)
