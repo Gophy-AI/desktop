@@ -643,19 +643,15 @@ public class VoxtralRealtimeModel: Module {
 
     /// Find STREAMING_PAD token ID from tokenizer.
     private func findStreamingPadId() -> Int {
-        // Default STREAMING_PAD ID for Tekken tokenizer
-        // In Mistral's tekken.json, [STREAMING_PAD] is a control token
-        // Try to look it up from tokenizer, fall back to known ID
+        // [STREAMING_PAD] has rank=32 in Mistral's Tekken tokenizer (tekken.json).
+        // tokenizer.encode() tokenizes literal text, not special tokens, so we use the known ID.
         if let tokenizer = tokenizer {
             let encoded = tokenizer.encode(text: "[STREAMING_PAD]")
             if encoded.count == 1 {
                 return encoded[0]
             }
         }
-        // Known ID from Mistral Tekken tokenizer: 10 is a common control token
-        // Actually from the voxmlx code: sp.get_special_token("[STREAMING_PAD]")
-        // The Tekken tokenizer maps this to token 10
-        return 10
+        return 32
     }
 
     /// Generate transcription from audio.
@@ -715,8 +711,8 @@ public class VoxtralRealtimeModel: Module {
             if temperature <= 0 {
                 return logits[0, logits.dim(1) - 1].argMax(axis: -1).item(Int.self)
             }
-            let scaled = logits[0, logits.dim(1) - 1] / temperature
-            return MLX.argMax(scaled, axis: -1).item(Int.self)
+            let scaled = (logits[0, logits.dim(1) - 1] / temperature).expandedDimensions(axis: 0)
+            return categorical(scaled).item(Int.self)
         }
 
         var outputTokens: [Int] = []
@@ -815,8 +811,8 @@ public class VoxtralRealtimeModel: Module {
                     if temperature <= 0 {
                         return logits[0, logits.dim(1) - 1].argMax(axis: -1).item(Int.self)
                     }
-                    let scaled = logits[0, logits.dim(1) - 1] / temperature
-                    return MLX.argMax(scaled, axis: -1).item(Int.self)
+                    let scaled = (logits[0, logits.dim(1) - 1] / temperature).expandedDimensions(axis: 0)
+                    return categorical(scaled).item(Int.self)
                 }
 
                 var outputTokens: [Int] = []
@@ -891,22 +887,11 @@ public class VoxtralRealtimeModel: Module {
 
     // MARK: - Weight Loading
 
-    /// Sanitize weights: transpose Conv1d weights from PyTorch format.
+    /// Sanitize weights: mlx-community pre-converted models already in MLX layout.
     public func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {
-        var sanitized: [String: MLXArray] = [:]
-        for (k, v) in weights {
-            if (k.contains("conv1.weight") || k.contains("conv2.weight")) && !k.contains("bias") {
-                // Conv1d: PyTorch [C_out, C_in, K] -> MLX [C_out, K, C_in]
-                if v.ndim == 3 {
-                    sanitized[k] = v.transposed(0, 2, 1)
-                } else {
-                    sanitized[k] = v
-                }
-            } else {
-                sanitized[k] = v
-            }
-        }
-        return sanitized
+        // mlx-community pre-converted models store conv weights in MLX layout already.
+        // No transposition needed (matches Python voxmlx _load_converted path).
+        return weights
     }
 
     /// Load model from pretrained weights (HuggingFace Hub or local).
