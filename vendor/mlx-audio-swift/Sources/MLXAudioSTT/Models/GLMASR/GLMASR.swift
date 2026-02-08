@@ -291,7 +291,7 @@ public class GLMASRModel: Module {
     public let config: GLMASRModelConfig
     public let vocabSize: Int
 
-    @ModuleInfo(key: "audio_encoder") var audioEncoder: AudioEncoder
+    @ModuleInfo(key: "audio_encoder") var audioEncoder: GLMASRAudioEncoder
     @ModuleInfo(key: "language_model") var languageModel: GLMASRLanguageModel
 
     public var tokenizer: Tokenizer?
@@ -300,7 +300,7 @@ public class GLMASRModel: Module {
         self.config = config
         self.vocabSize = config.lmConfig.vocabSize
 
-        self._audioEncoder.wrappedValue = AudioEncoder(config: config)
+        self._audioEncoder.wrappedValue = GLMASRAudioEncoder(config: config)
         self._languageModel.wrappedValue = GLMASRLanguageModel(config: config.lmConfig)
     }
 

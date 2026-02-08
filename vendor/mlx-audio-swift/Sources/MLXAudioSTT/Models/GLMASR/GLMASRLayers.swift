@@ -207,7 +207,7 @@ public class AdaptingMLP: Module {
 /// - audio_encoder.proj.*
 /// - audio_encoder.adapting.*
 /// - audio_encoder.audio_bos_eos_token.*
-public class AudioEncoder: Module {
+public class GLMASRAudioEncoder: Module {
     let config: GLMASRModelConfig
 
     @ModuleInfo(key: "whisper") var whisper: WhisperEncoder
