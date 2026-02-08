@@ -62,6 +62,116 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 approximateSizeGB: 0.47,
                 memoryUsageGB: 0.5,
                 source: .curated
+            ),
+            // TTS models
+            ModelDefinition(
+                id: "soprano-80m-bf16",
+                name: "Soprano 80M",
+                type: .tts,
+                huggingFaceID: "mlx-community/Soprano-80M-bf16",
+                approximateSizeGB: 0.3,
+                memoryUsageGB: 0.4,
+                source: .curated
+            ),
+            ModelDefinition(
+                id: "marvis-tts-250m-8bit",
+                name: "Marvis TTS 250M",
+                type: .tts,
+                huggingFaceID: "Marvis-AI/marvis-tts-250m-v0.2-MLX-8bit",
+                approximateSizeGB: 0.5,
+                memoryUsageGB: 0.6,
+                source: .curated
+            ),
+            ModelDefinition(
+                id: "orpheus-3b-bf16",
+                name: "Orpheus 3B",
+                type: .tts,
+                huggingFaceID: "mlx-community/orpheus-3b-0.1-ft-bf16",
+                approximateSizeGB: 6.0,
+                memoryUsageGB: 6.5,
+                source: .curated
+            ),
+            ModelDefinition(
+                id: "vyvotts-en-beta-4bit",
+                name: "VyvoTTS EN",
+                type: .tts,
+                huggingFaceID: "mlx-community/VyvoTTS-EN-Beta-4bit",
+                approximateSizeGB: 2.0,
+                memoryUsageGB: 2.5,
+                source: .curated
+            ),
+            ModelDefinition(
+                id: "pocket-tts",
+                name: "PocketTTS",
+                type: .tts,
+                huggingFaceID: "mlx-community/pocket-tts",
+                approximateSizeGB: 0.3,
+                memoryUsageGB: 0.4,
+                source: .curated
+            ),
+            // MLX STT models (audioRegistry)
+            ModelDefinition(
+                id: "glmasr-large-v2",
+                name: "GLM-ASR Large v2",
+                type: .stt,
+                huggingFaceID: "THUDM/glm-4-voice-tokenizer",
+                approximateSizeGB: 2.0,
+                memoryUsageGB: 2.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "lasr-ctc-large",
+                name: "LASR CTC Large",
+                type: .stt,
+                huggingFaceID: "DeweyReed/LASR-CTC-large-v1",
+                approximateSizeGB: 1.2,
+                memoryUsageGB: 1.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "whisper-mlx-large-v3",
+                name: "Whisper Large v3 (MLX)",
+                type: .stt,
+                huggingFaceID: "mlx-community/whisper-large-v3",
+                approximateSizeGB: 3.0,
+                memoryUsageGB: 3.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "parakeet-ctc-1.1b",
+                name: "Parakeet CTC 1.1B",
+                type: .stt,
+                huggingFaceID: "nvidia/parakeet-ctc-1.1b",
+                approximateSizeGB: 2.2,
+                memoryUsageGB: 2.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "qwen3-asr",
+                name: "Qwen3 ASR",
+                type: .stt,
+                huggingFaceID: "Qwen/Qwen3-ASR",
+                approximateSizeGB: 4.0,
+                memoryUsageGB: 4.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "wav2vec-large-960h",
+                name: "Wav2Vec2 Large 960h",
+                type: .stt,
+                huggingFaceID: "facebook/wav2vec2-large-960h-lv60-self",
+                approximateSizeGB: 1.2,
+                memoryUsageGB: 1.5,
+                source: .audioRegistry
+            ),
+            ModelDefinition(
+                id: "voxtral-mini",
+                name: "Voxtral Mini",
+                type: .stt,
+                huggingFaceID: "mlx-community/Voxtral-Mini-3B-2507-bf16",
+                approximateSizeGB: 6.0,
+                memoryUsageGB: 6.5,
+                source: .audioRegistry
             )
         ])
 

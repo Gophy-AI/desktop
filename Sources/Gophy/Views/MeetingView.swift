@@ -5,9 +5,11 @@ struct MeetingView: View {
     @State private var viewModel: MeetingViewModel
     @State private var shouldAutoScroll = true
     @State private var scrollProxy: ScrollViewProxy?
+    var ttsPlaybackService: TTSPlaybackService?
 
-    init(viewModel: MeetingViewModel) {
+    init(viewModel: MeetingViewModel, ttsPlaybackService: TTSPlaybackService? = nil) {
         self._viewModel = State(initialValue: viewModel)
+        self.ttsPlaybackService = ttsPlaybackService
     }
 
     private var formattedDuration: String {
@@ -69,7 +71,8 @@ struct MeetingView: View {
                 isGenerating: viewModel.isGeneratingSuggestion,
                 onRefresh: {
                     await viewModel.refreshSuggestions()
-                }
+                },
+                ttsPlaybackService: ttsPlaybackService
             )
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
@@ -91,6 +94,21 @@ struct MeetingView: View {
                 .disabled(viewModel.status == .active || viewModel.status == .paused)
 
             Spacer()
+
+            Picker("", selection: Binding(
+                get: { viewModel.selectedLanguage },
+                set: { newValue in
+                    Task {
+                        await viewModel.updateLanguage(newValue)
+                    }
+                }
+            )) {
+                ForEach(AppLanguage.allCases, id: \.self) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 130)
 
             HStack(spacing: 8) {
                 Circle()

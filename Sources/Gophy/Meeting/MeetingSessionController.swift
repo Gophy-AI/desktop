@@ -309,6 +309,11 @@ public actor MeetingSessionController {
         await systemAudioCapture.stop()
     }
 
+    public func setTranscriptionLanguage(_ language: AppLanguage) async {
+        await transcriptionPipeline.setLanguageHint(language.isoCode)
+        logger.info("Transcription language changed to: \(language.displayName, privacy: .public)")
+    }
+
     public func resume() async throws {
         guard currentStatus == .paused else {
             throw MeetingSessionError.sessionNotPaused

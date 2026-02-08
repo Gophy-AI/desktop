@@ -17,6 +17,13 @@ public final class MeetingViewModel {
     public var systemAudioLevel: Float = 0
     public var errorMessage: String?
     public var isGeneratingSuggestion = false
+    public var selectedLanguage: AppLanguage = {
+        if let saved = UserDefaults.standard.string(forKey: "languagePreference"),
+           let lang = AppLanguage(rawValue: saved) {
+            return lang
+        }
+        return .auto
+    }()
 
     private var eventTask: Task<Void, Never>?
     private var durationTimer: Timer?
@@ -65,6 +72,12 @@ public final class MeetingViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    public func updateLanguage(_ language: AppLanguage) async {
+        selectedLanguage = language
+        UserDefaults.standard.set(language.rawValue, forKey: "languagePreference")
+        await sessionController.setTranscriptionLanguage(language)
     }
 
     public func refreshSuggestions() async {
