@@ -1,70 +1,34 @@
 import SwiftUI
+import os.log
 
-struct ChatContext: Identifiable {
-    let id: String
-    let title: String
-}
+private let logger = Logger(subsystem: "com.gophy.app", category: "ChatView")
 
 @MainActor
 struct ChatView: View {
-    let meetingId: String?
-    let meetingTitle: String?
-    let documentId: String?
-    let documentName: String?
+    let initialChatId: String?
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: ChatViewModel?
-    @State private var showClearConfirmation: Bool = false
+    @State private var database: GophyDatabase?
+    @State private var chatListViewModel: ChatListViewModel?
+    @State private var selectedChatId: String?
 
-    init(
-        meetingId: String? = nil,
-        meetingTitle: String? = nil,
-        documentId: String? = nil,
-        documentName: String? = nil
-    ) {
-        self.meetingId = meetingId
-        self.meetingTitle = meetingTitle
-        self.documentId = documentId
-        self.documentName = documentName
+    init(initialChatId: String? = nil) {
+        self.initialChatId = initialChatId
     }
 
     var body: some View {
         Group {
-            if let viewModel = viewModel {
-                VStack(spacing: 0) {
-                    headerView(viewModel: viewModel)
+            if let database, let chatListViewModel {
+                HSplitView {
+                    ChatListView(
+                        viewModel: chatListViewModel,
+                        selectedChatId: $selectedChatId
+                    )
 
-                    Divider()
-
-                    if let errorMessage = viewModel.errorMessage {
-                        errorView(message: errorMessage, viewModel: viewModel)
-                    }
-
-                    if viewModel.messages.isEmpty {
-                        emptyStateView
+                    if let selectedChatId, let chat = chatListViewModel.chats.first(where: { $0.id == selectedChatId }) {
+                        ChatDetailView(chat: chat, database: database)
                     } else {
-                        messageListView(viewModel: viewModel)
+                        emptySelectionView
                     }
-
-                    Divider()
-
-                    inputView(viewModel: viewModel)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
-                .confirmationDialog(
-                    "Clear Chat",
-                    isPresented: $showClearConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Clear All Messages", role: .destructive) {
-                        Task {
-                            await viewModel.clearMessages()
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Are you sure you want to clear all chat messages?")
                 }
             } else {
                 SwiftUI.ProgressView("Loading...")
@@ -72,217 +36,58 @@ struct ChatView: View {
             }
         }
         .task {
-            await initializeViewModel()
+            await initialize()
+        }
+        .onChange(of: initialChatId) { _, newValue in
+            guard let newValue else { return }
+            selectedChatId = newValue
+            if let chatListViewModel {
+                Task {
+                    await chatListViewModel.loadChats()
+                }
+            }
         }
     }
 
-    private var scopeLabel: String? {
-        if let meetingTitle {
-            return "Meeting: \(meetingTitle)"
-        } else if let documentName {
-            return "Document: \(documentName)"
-        }
-        return nil
-    }
-
-    private var isScoped: Bool {
-        meetingId != nil || documentId != nil
-    }
-
-    private func headerView(viewModel: ChatViewModel) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Chat")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-
-                if let label = scopeLabel {
-                    Text(label)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            if !isScoped {
-                Picker("Scope", selection: Binding(
-                    get: { viewModel.selectedScope },
-                    set: { viewModel.selectedScope = $0 }
-                )) {
-                    Text("All").tag(RAGScope.all)
-                    Text("Meetings").tag(RAGScope.meetings)
-                    Text("Documents").tag(RAGScope.documents)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 300)
-                .disabled(viewModel.isGenerating)
-            }
-
-            Button(action: {
-                showClearConfirmation = true
-            }) {
-                Label("Clear", systemImage: "trash")
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.messages.isEmpty || viewModel.isGenerating)
-
-            if isScoped {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding()
-    }
-
-    private var emptyStateView: some View {
+    private var emptySelectionView: some View {
         VStack(spacing: 20) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
 
-            Text("Ask a Question")
+            Text("Select a Chat")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Ask a question about your meetings or documents")
+            Text("Choose a chat from the sidebar or create a new one")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func messageListView(viewModel: ChatViewModel) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 16) {
-                    ForEach(viewModel.messages) { message in
-                        ChatMessageBubble(message: message)
-                            .id(message.id)
-                    }
-
-                    if viewModel.isGenerating {
-                        HStack {
-                            SwiftUI.ProgressView()
-                                .scaleEffect(0.7)
-                            Text("Generating...")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-                .padding()
-            }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastMessage = viewModel.messages.last {
-                    withAnimation {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                    }
-                }
-            }
-        }
-    }
-
-    private func inputView(viewModel: ChatViewModel) -> some View {
-        HStack(spacing: 12) {
-            TextField("Type your question...", text: Binding(
-                get: { viewModel.inputText },
-                set: { viewModel.inputText = $0 }
-            ), axis: .vertical)
-            .textFieldStyle(.plain)
-            .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-            .lineLimit(1...5)
-            .onSubmit {
-                Task {
-                    await viewModel.sendMessage()
-                }
-            }
-            .disabled(viewModel.isGenerating)
-
-            Button(action: {
-                Task {
-                    await viewModel.sendMessage()
-                }
-            }) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(canSend(viewModel) ? .blue : .secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend(viewModel))
-        }
-        .padding()
-    }
-
-    private func errorView(message: String, viewModel: ChatViewModel) -> some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.red)
-            Text(message)
-                .foregroundStyle(.red)
-            Spacer()
-            Button("Dismiss") {
-                viewModel.errorMessage = nil
-            }
-        }
-        .padding()
-        .background(Color.red.opacity(0.1))
-    }
-
-    private func canSend(_ viewModel: ChatViewModel) -> Bool {
-        !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !viewModel.isGenerating
-    }
-
-    private func initializeViewModel() async {
-        guard viewModel == nil else { return }
+    private func initialize() async {
+        guard database == nil else { return }
 
         do {
             let storageManager = StorageManager()
-            let database = try GophyDatabase(storageManager: storageManager)
-            let documentRepo = DocumentRepository(database: database)
-            let meetingRepo = MeetingRepository(database: database)
-            let chatRepo = ChatMessageRepository(database: database)
+            let db = try GophyDatabase(storageManager: storageManager)
+            let chatRepo = ChatRepository(database: db)
+            let vm = ChatListViewModel(chatRepository: chatRepo)
+            await vm.loadChats()
 
-            let embeddingEngine = EmbeddingEngine()
-            let textGenEngine = TextGenerationEngine()
+            database = db
+            chatListViewModel = vm
 
-            if !embeddingEngine.isLoaded {
-                try await embeddingEngine.load()
+            if let initialChatId {
+                selectedChatId = initialChatId
+            } else {
+                selectedChatId = vm.predefinedChats.first?.id ?? "predefined-all"
             }
-
-            if !textGenEngine.isLoaded {
-                try await textGenEngine.load()
-            }
-
-            let vectorSearchService = VectorSearchService(database: database)
-
-            let ragPipeline = RAGPipeline(
-                embeddingEngine: embeddingEngine,
-                vectorSearchService: vectorSearchService,
-                textGenerationEngine: textGenEngine,
-                meetingRepository: meetingRepo,
-                documentRepository: documentRepo
-            )
-
-            let vm = ChatViewModel(
-                ragPipeline: ragPipeline,
-                chatMessageRepository: chatRepo,
-                meetingId: meetingId,
-                documentId: documentId
-            )
-            await vm.loadMessages()
-            viewModel = vm
         } catch {
-            print("Failed to initialize ChatView: \(error)")
+            logger.error("Failed to initialize ChatView: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

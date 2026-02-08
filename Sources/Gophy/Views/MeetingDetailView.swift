@@ -4,6 +4,7 @@ import SwiftUI
 struct MeetingDetailView: View {
     @State private var viewModel: MeetingDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(NavigationCoordinator.self) private var navigationCoordinator
 
     init(viewModel: MeetingDetailViewModel) {
         self._viewModel = State(initialValue: viewModel)
@@ -110,6 +111,23 @@ struct MeetingDetailView: View {
                     .buttonStyle(.bordered)
                     .disabled(viewModel.isWritingBack || viewModel.transcriptSegments.isEmpty)
                 }
+
+                Button(action: {
+                    Task {
+                        await navigationCoordinator.openChat(
+                            contextType: .meeting,
+                            contextId: viewModel.meeting.id,
+                            title: viewModel.meeting.title
+                        )
+                        dismiss()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left")
+                        Text("Chat")
+                    }
+                }
+                .buttonStyle(.bordered)
 
                 Button(action: {}) {
                     HStack(spacing: 4) {

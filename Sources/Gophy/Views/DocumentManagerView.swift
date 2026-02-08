@@ -6,11 +6,11 @@ private let docViewLogger = Logger(subsystem: "com.gophy.app", category: "Docume
 
 @MainActor
 struct DocumentManagerView: View {
+    @Environment(NavigationCoordinator.self) private var navigationCoordinator
     @State private var viewModel: DocumentManagerViewModel?
     @State private var selectedDocument: DocumentRecord?
     @State private var initError: String?
     @State private var isDragOver = false
-    @State private var chatDocumentContext: ChatContext?
 
     var body: some View {
         Group {
@@ -124,7 +124,7 @@ struct DocumentManagerView: View {
                             viewModel: viewModel,
                             onSelect: { selectedDocument = document },
                             onOpenChat: {
-                                chatDocumentContext = ChatContext(id: document.id, title: document.name)
+                                Task { await navigationCoordinator.openChat(contextType: .document, contextId: document.id, title: document.name) }
                             },
                             onDelete: {
                                 Task { await viewModel.deleteDocument(document) }
@@ -132,7 +132,7 @@ struct DocumentManagerView: View {
                         )
                         .contextMenu {
                             Button {
-                                chatDocumentContext = ChatContext(id: document.id, title: document.name)
+                                Task { await navigationCoordinator.openChat(contextType: .document, contextId: document.id, title: document.name) }
                             } label: {
                                 Label("Open Chat", systemImage: "bubble.left")
                             }
@@ -166,10 +166,6 @@ struct DocumentManagerView: View {
         }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers: providers, viewModel: viewModel)
-        }
-        .sheet(item: $chatDocumentContext) { context in
-            ChatView(documentId: context.id, documentName: context.title)
-                .frame(minWidth: 600, minHeight: 500)
         }
     }
 

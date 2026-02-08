@@ -8,7 +8,6 @@ struct CalendarMeetingsView: View {
         case newMeeting
         case newMeetingForEvent
         case linkDocument(MeetingRecord)
-        case chat(meetingId: String, meetingTitle: String)
 
         var id: String {
             switch self {
@@ -16,11 +15,11 @@ struct CalendarMeetingsView: View {
             case .newMeeting: return "new"
             case .newMeetingForEvent: return "new-event"
             case .linkDocument(let m): return "link-\(m.id)"
-            case .chat(let id, _): return "chat-\(id)"
             }
         }
     }
 
+    @Environment(NavigationCoordinator.self) private var navigationCoordinator
     @State private var viewModel: CalendarMeetingsViewModel?
     @State private var initError: String?
     @State private var activeSheet: SheetDestination?
@@ -175,9 +174,6 @@ struct CalendarMeetingsView: View {
                     meetingTitle: meeting.title,
                     viewModel: viewModel
                 )
-            case .chat(let meetingId, let meetingTitle):
-                ChatView(meetingId: meetingId, meetingTitle: meetingTitle)
-                    .frame(minWidth: 600, minHeight: 500)
             }
         }
         .fileImporter(
@@ -692,7 +688,7 @@ struct CalendarMeetingsView: View {
                     .help("Link Document")
 
                     Button {
-                        activeSheet = .chat(meetingId: meeting.id, meetingTitle: meeting.title)
+                        Task { await navigationCoordinator.openChat(contextType: .meeting, contextId: meeting.id, title: meeting.title) }
                     } label: {
                         Image(systemName: "bubble.left")
                             .font(.caption)
@@ -719,7 +715,7 @@ struct CalendarMeetingsView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                activeSheet = .chat(meetingId: meeting.id, meetingTitle: meeting.title)
+                Task { await navigationCoordinator.openChat(contextType: .meeting, contextId: meeting.id, title: meeting.title) }
             } label: {
                 Label("Open Chat", systemImage: "bubble.left")
             }

@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct MeetingHistoryView: View {
+    @Environment(NavigationCoordinator.self) private var navigationCoordinator
     @State private var viewModel: MeetingHistoryViewModel
     @State private var selectedMeeting: MeetingRecord?
     @State private var showDetail = false
@@ -177,6 +178,9 @@ struct MeetingHistoryView: View {
                             selectedMeeting = meeting
                             showDetail = true
                         },
+                        onChat: {
+                            Task { await navigationCoordinator.openChat(contextType: .meeting, contextId: meeting.id, title: meeting.title) }
+                        },
                         onDelete: {
                             viewModel.confirmDelete(meeting)
                         },
@@ -198,6 +202,7 @@ struct MeetingHistoryView: View {
 struct MeetingListRowView: View {
     let meeting: MeetingRecord
     let onSelect: () -> Void
+    var onChat: (() -> Void)?
     let onDelete: () -> Void
     let formatDuration: () -> String
     let formatDate: () -> String
@@ -244,15 +249,32 @@ struct MeetingListRowView: View {
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 8) {
+                    if let onChat {
+                        Button(action: onChat) {
+                            Image(systemName: "bubble.left")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open Chat")
+                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if let onChat {
+                Button(action: onChat) {
+                    Label("Open Chat", systemImage: "bubble.left")
+                }
+            }
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }

@@ -6,6 +6,7 @@ public struct ChatMessageRecord: Codable, Sendable {
     public let role: String
     public let content: String
     public let meetingId: String?
+    public let chatId: String?
     public let createdAt: Date
 
     public init(
@@ -13,12 +14,14 @@ public struct ChatMessageRecord: Codable, Sendable {
         role: String,
         content: String,
         meetingId: String?,
+        chatId: String? = nil,
         createdAt: Date
     ) {
         self.id = id
         self.role = role
         self.content = content
         self.meetingId = meetingId
+        self.chatId = chatId
         self.createdAt = createdAt
     }
 }

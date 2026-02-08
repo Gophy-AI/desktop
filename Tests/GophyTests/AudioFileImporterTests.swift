@@ -17,7 +17,7 @@ struct AudioFileImporterTests {
 
     @Test("supportedFormats contains all required formats")
     func testSupportedFormats() {
-        let expected: Set<String> = ["mp3", "wav", "m4a", "mp4", "aiff", "caf", "flac"]
+        let expected: Set<String> = ["mp3", "wav", "m4a", "mp4", "aiff", "caf", "flac", "mov", "mkv", "webm"]
         let actual = Set(AudioFileImporter.supportedFormats)
         #expect(actual == expected)
     }

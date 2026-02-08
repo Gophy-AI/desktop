@@ -32,6 +32,23 @@ public final class ChatMessageRepository: Sendable {
         }
     }
 
+    public func listForChat(chatId: String) async throws -> [ChatMessageRecord] {
+        try await database.dbQueue.read { db in
+            try ChatMessageRecord
+                .filter(Column("chatId") == chatId)
+                .order(Column("createdAt").asc)
+                .fetchAll(db)
+        }
+    }
+
+    public func deleteAllForChat(chatId: String) async throws {
+        try await database.dbQueue.write { db in
+            _ = try ChatMessageRecord
+                .filter(Column("chatId") == chatId)
+                .deleteAll(db)
+        }
+    }
+
     public func delete(id: String) async throws {
         try await database.dbQueue.write { db in
             _ = try ChatMessageRecord.deleteOne(db, key: id)

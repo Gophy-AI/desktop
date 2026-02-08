@@ -20,6 +20,7 @@ final class ModelManagerViewModel {
     var selectedTextGenModelId: String = "qwen2.5-7b-instruct-4bit"
     var selectedOCRModelId: String = "qwen2.5-vl-7b-instruct-4bit"
     var selectedEmbeddingModelId: String = "multilingual-e5-small"
+    var selectedTTSModelId: String = "soprano-80m-bf16"
 
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var allModels: [ModelDefinition] = []
@@ -158,7 +159,7 @@ final class ModelManagerViewModel {
     }
 
     var hasDownloadedModels: Bool {
-        models.contains { registry.isDownloaded($0) }
+        allModels.contains { registry.isDownloaded($0) }
     }
 
     // MARK: - Per-Task Model Selection
@@ -169,6 +170,7 @@ final class ModelManagerViewModel {
         if let id = defaults.string(forKey: "selectedTextGenModelId") { selectedTextGenModelId = id }
         if let id = defaults.string(forKey: "selectedOCRModelId") { selectedOCRModelId = id }
         if let id = defaults.string(forKey: "selectedEmbeddingModelId") { selectedEmbeddingModelId = id }
+        if let id = defaults.string(forKey: "selectedTTSModelId") { selectedTTSModelId = id }
     }
 
     func isSelectedModel(_ model: ModelDefinition) -> Bool {
@@ -177,6 +179,7 @@ final class ModelManagerViewModel {
         case .textGen: return model.id == selectedTextGenModelId
         case .ocr: return model.id == selectedOCRModelId
         case .embedding: return model.id == selectedEmbeddingModelId
+        case .tts: return model.id == selectedTTSModelId
         }
     }
 
@@ -195,6 +198,9 @@ final class ModelManagerViewModel {
         case .embedding:
             selectedEmbeddingModelId = model.id
             defaults.set(model.id, forKey: "selectedEmbeddingModelId")
+        case .tts:
+            selectedTTSModelId = model.id
+            defaults.set(model.id, forKey: "selectedTTSModelId")
         }
     }
 }

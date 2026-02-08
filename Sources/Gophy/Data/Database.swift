@@ -238,6 +238,82 @@ public final class GophyDatabase: Sendable {
             try db.execute(sql: "INSERT INTO embedding_metadata(dimension) VALUES (384)")
         }
 
+        migrator.registerMigration("v17_create_chats") { db in
+            // 1. Create chats table
+            try db.create(table: "chats") { t in
+                t.column("id", .text).primaryKey()
+                t.column("title", .text).notNull()
+                t.column("contextType", .text).notNull()
+                t.column("contextId", .text)
+                t.column("isPredefined", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_chats_contextType", on: "chats", columns: ["contextType"])
+
+            // 2. Insert 3 predefined chats
+            let now = Date()
+            let predefinedChats: [(String, String, String)] = [
+                ("predefined-all", "All", "all"),
+                ("predefined-meetings", "Meetings", "meetings"),
+                ("predefined-documents", "Documents", "documents"),
+            ]
+            for (id, title, contextType) in predefinedChats {
+                try db.execute(
+                    sql: """
+                        INSERT INTO chats (id, title, contextType, contextId, isPredefined, createdAt, updatedAt)
+                        VALUES (?, ?, ?, NULL, 1, ?, ?)
+                        """,
+                    arguments: [id, title, contextType, now, now]
+                )
+            }
+
+            // 3. Add chatId column to chat_messages (nullable)
+            try db.alter(table: "chat_messages") { t in
+                t.add(column: "chatId", .text)
+            }
+
+            // 4. Migrate existing data
+            // 4a. Global messages (meetingId IS NULL) -> predefined-all
+            try db.execute(sql: """
+                UPDATE chat_messages SET chatId = 'predefined-all' WHERE meetingId IS NULL
+                """)
+
+            // 4b. Per-meeting messages: create a chat per distinct meetingId
+            let meetingIds = try String.fetchAll(db, sql: """
+                SELECT DISTINCT meetingId FROM chat_messages WHERE meetingId IS NOT NULL
+                """)
+            for meetingId in meetingIds {
+                let chatId = "chat-meeting-\(meetingId)"
+                // Try to get the meeting title for a nicer chat name
+                let meetingTitle = try String.fetchOne(db, sql: """
+                    SELECT title FROM meetings WHERE id = ?
+                    """, arguments: [meetingId])
+                let title = meetingTitle ?? "Meeting"
+
+                try db.execute(
+                    sql: """
+                        INSERT INTO chats (id, title, contextType, contextId, isPredefined, createdAt, updatedAt)
+                        VALUES (?, ?, 'meeting', ?, 0, ?, ?)
+                        """,
+                    arguments: [chatId, title, meetingId, now, now]
+                )
+
+                try db.execute(
+                    sql: """
+                        UPDATE chat_messages SET chatId = ? WHERE meetingId = ?
+                        """,
+                    arguments: [chatId, meetingId]
+                )
+            }
+
+            // 5. Create index on chatId
+            try db.create(index: "idx_chat_messages_chatId", on: "chat_messages", columns: ["chatId"])
+
+            // 6. Unique index on (contextType, contextId) to prevent duplicate context chats
+            try db.execute(sql: "CREATE UNIQUE INDEX idx_chats_context ON chats(contextType, contextId) WHERE contextId IS NOT NULL")
+        }
+
         return migrator
     }
 }

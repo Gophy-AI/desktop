@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct GophyApp: App {
-    @State private var selectedItem: SidebarItem? = .meetings
+    @State private var navigationCoordinator = NavigationCoordinator()
     @State private var showOnboarding: Bool = !OnboardingViewModel.hasCompletedOnboarding()
 
     init() {
@@ -13,7 +13,7 @@ struct GophyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(selectedItem: $selectedItem)
+            ContentView(navigationCoordinator: navigationCoordinator)
                 .sheet(isPresented: $showOnboarding) {
                     OnboardingView {
                         showOnboarding = false
@@ -30,7 +30,7 @@ struct GophyApp: App {
 
             CommandGroup(after: .newItem) {
                 Button("New Meeting") {
-                    selectedItem = .meetings
+                    navigationCoordinator.selectedItem = .meetings
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
@@ -58,17 +58,20 @@ struct GophyApp: App {
 
 @MainActor
 struct ContentView: View {
-    @Binding var selectedItem: SidebarItem?
+    @Bindable var navigationCoordinator: NavigationCoordinator
     @FocusState private var focusedField: String?
 
     var body: some View {
         NavigationSplitView {
             SidebarView(
-                selectedItem: $selectedItem
+                selectedItem: $navigationCoordinator.selectedItem
             )
         } detail: {
-            if let item = selectedItem {
-                PlaceholderView(item: item)
+            if let item = navigationCoordinator.selectedItem {
+                PlaceholderView(
+                    item: item,
+                    selectedChatId: navigationCoordinator.selectedChatId
+                )
             } else {
                 VStack(spacing: 20) {
                     Text("Gophy")
@@ -83,6 +86,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .environment(navigationCoordinator)
         .onAppear {
             setupKeyboardShortcuts()
         }
@@ -93,22 +97,22 @@ struct ContentView: View {
             if event.modifierFlags.contains(.command) {
                 switch event.charactersIgnoringModifiers {
                 case "1":
-                    selectedItem = .meetings
+                    navigationCoordinator.selectedItem = .meetings
                     return nil
                 case "2":
-                    selectedItem = .documents
+                    navigationCoordinator.selectedItem = .documents
                     return nil
                 case "3":
-                    selectedItem = .chat
+                    navigationCoordinator.selectedItem = .chat
                     return nil
                 case "4":
-                    selectedItem = .models
+                    navigationCoordinator.selectedItem = .models
                     return nil
                 case "5":
-                    selectedItem = .settings
+                    navigationCoordinator.selectedItem = .settings
                     return nil
                 case ",":
-                    selectedItem = .settings
+                    navigationCoordinator.selectedItem = .settings
                     return nil
                 default:
                     break
@@ -120,5 +124,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(selectedItem: .constant(.meetings))
+    @Previewable @State var coordinator = NavigationCoordinator()
+    ContentView(navigationCoordinator: coordinator)
 }

@@ -74,8 +74,8 @@ struct VADFilterTests {
 
     @Test("adjustable threshold changes sensitivity")
     func testAdjustableThreshold() async throws {
-        // Test with high threshold (more permissive)
-        let permissiveFilter = VADFilter(thresholdDB: -50)
+        // Test with high threshold (more permissive) — must be lower than signal's -60 dB
+        let permissiveFilter = VADFilter(thresholdDB: -70)
 
         // Create very quiet chunk
         let quietSamples = Array(repeating: Float(0.001), count: 16000)

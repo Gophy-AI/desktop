@@ -6,11 +6,6 @@ struct ModelManagerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !viewModel.hasDownloadedModels {
-                FirstLaunchBanner()
-                    .padding()
-            }
-
             DiskUsageSummary(totalDiskUsageGB: viewModel.totalDiskUsageGB)
                 .padding(.horizontal)
                 .padding(.vertical, 12)
@@ -31,6 +26,7 @@ struct ModelManagerView: View {
                     Text("Text Generation").tag(ModelType.textGen as ModelType?)
                     Text("OCR & Vision").tag(ModelType.ocr as ModelType?)
                     Text("Embeddings").tag(ModelType.embedding as ModelType?)
+                    Text("Text-to-Speech").tag(ModelType.tts as ModelType?)
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: viewModel.selectedTypeFilter) { _, newValue in
@@ -66,30 +62,6 @@ struct ModelManagerView: View {
         }
         .navigationTitle("Models")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-struct FirstLaunchBanner: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(.blue)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Download models to get started")
-                    .font(.headline)
-
-                Text("Select models below to enable transcription, chat, and document analysis")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding()
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(8)
     }
 }
 
@@ -238,6 +210,8 @@ struct ModelRow: View {
             return "doc.viewfinder"
         case .embedding:
             return "circle.grid.3x3"
+        case .tts:
+            return "speaker.wave.2.fill"
         }
     }
 
@@ -251,6 +225,8 @@ struct ModelRow: View {
             return .orange
         case .embedding:
             return .purple
+        case .tts:
+            return .pink
         }
     }
 }
@@ -387,6 +363,8 @@ extension ModelType {
             return "OCR & Vision"
         case .embedding:
             return "Embeddings"
+        case .tts:
+            return "Text-to-Speech"
         }
     }
 }
