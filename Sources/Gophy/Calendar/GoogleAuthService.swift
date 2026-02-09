@@ -71,62 +71,71 @@ final class AppAuthOAuthProvider: OAuthProviderProtocol {
 
     @MainActor
     private func performSignIn(
-        config: GoogleCalendarConfig,
-        window: NSWindow
+        config: GoogleCalendarConfig
     ) async throws -> OAuthTokens {
         let configuration = AuthSession.configurationForGoogle()
 
+        let redirectHandler = OIDRedirectHTTPHandler(successURL: nil)
+
+        var listenerError: NSError?
+        let redirectURI = redirectHandler.startHTTPListener(&listenerError)
+        if let listenerError {
+            throw GoogleAuthError.authorizationFailed("Failed to start loopback HTTP listener: \(listenerError.localizedDescription)")
+        }
+
+        let clientSecret = GoogleCalendarConfig.clientSecret.isEmpty ? nil : GoogleCalendarConfig.clientSecret
+
         let request = OIDAuthorizationRequest(
             configuration: configuration,
-            clientId: config.clientID,
-            clientSecret: nil,
+            clientId: GoogleCalendarConfig.clientID,
+            clientSecret: clientSecret,
             scopes: config.scopes,
-            redirectURL: config.redirectURI,
+            redirectURL: redirectURI,
             responseType: OIDResponseTypeCode,
             additionalParameters: nil
         )
 
-        let externalUserAgent = OIDExternalUserAgentMac(presenting: window)
-
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<OAuthTokens, Error>) in
-            OIDAuthState.authState(
+            redirectHandler.currentAuthorizationFlow = OIDAuthState.authState(
                 byPresenting: request,
-                externalUserAgent: externalUserAgent
-            ) { authState, error in
-                if let error = error as NSError? {
-                    if error.domain == OIDGeneralErrorDomain,
-                       error.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue {
-                        continuation.resume(throwing: GoogleAuthError.userCancelled)
+                callback: { authState, error in
+                    redirectHandler.cancelHTTPListener()
+
+                    if let error = error as NSError? {
+                        if error.domain == OIDGeneralErrorDomain,
+                           error.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue {
+                            continuation.resume(throwing: GoogleAuthError.userCancelled)
+                            return
+                        }
+                        continuation.resume(throwing: GoogleAuthError.authorizationFailed(error.localizedDescription))
                         return
                     }
-                    continuation.resume(throwing: GoogleAuthError.authorizationFailed(error.localizedDescription))
-                    return
+
+                    guard let authState = authState,
+                          let accessToken = authState.lastTokenResponse?.accessToken else {
+                        continuation.resume(throwing: GoogleAuthError.authorizationFailed("No auth state returned"))
+                        return
+                    }
+
+                    let expiresAt = authState.lastTokenResponse?.accessTokenExpirationDate ?? Date().addingTimeInterval(3600)
+                    let refreshToken = authState.refreshToken
+                    let idToken = authState.lastTokenResponse?.idToken
+
+                    var email: String?
+                    if let idTokenString = idToken {
+                        email = Self.extractEmail(fromIDToken: idTokenString)
+                    }
+
+                    let tokens = OAuthTokens(
+                        accessToken: accessToken,
+                        refreshToken: refreshToken,
+                        expiresAt: expiresAt,
+                        idToken: idToken,
+                        userEmail: email
+                    )
+                    continuation.resume(returning: tokens)
                 }
-
-                guard let authState = authState,
-                      let accessToken = authState.lastTokenResponse?.accessToken else {
-                    continuation.resume(throwing: GoogleAuthError.authorizationFailed("No auth state returned"))
-                    return
-                }
-
-                let expiresAt = authState.lastTokenResponse?.accessTokenExpirationDate ?? Date().addingTimeInterval(3600)
-                let refreshToken = authState.refreshToken
-                let idToken = authState.lastTokenResponse?.idToken
-
-                var email: String?
-                if let idTokenString = idToken {
-                    email = Self.extractEmail(fromIDToken: idTokenString)
-                }
-
-                let tokens = OAuthTokens(
-                    accessToken: accessToken,
-                    refreshToken: refreshToken,
-                    expiresAt: expiresAt,
-                    idToken: idToken,
-                    userEmail: email
-                )
-                continuation.resume(returning: tokens)
-            }
+            )
         }
     }
 
@@ -134,14 +143,7 @@ final class AppAuthOAuthProvider: OAuthProviderProtocol {
         config: GoogleCalendarConfig,
         presentingWindow: sending AnyObject?
     ) async throws -> OAuthTokens {
-        let pw: AnyObject? = presentingWindow
-        let window: NSWindow = try await MainActor.run {
-            guard let w = pw as? NSWindow ?? NSApplication.shared.keyWindow else {
-                throw GoogleAuthError.authorizationFailed("No presenting window available")
-            }
-            return w
-        }
-        return try await performSignIn(config: config, window: window)
+        return try await performSignIn(config: config)
     }
 
     func refreshAccessToken(
@@ -150,13 +152,15 @@ final class AppAuthOAuthProvider: OAuthProviderProtocol {
     ) async throws -> OAuthTokens {
         let configuration = AuthSession.configurationForGoogle()
 
+        let clientSecret = GoogleCalendarConfig.clientSecret.isEmpty ? nil : GoogleCalendarConfig.clientSecret
+
         let tokenRequest = OIDTokenRequest(
             configuration: configuration,
             grantType: OIDGrantTypeRefreshToken,
             authorizationCode: nil,
-            redirectURL: config.redirectURI,
-            clientID: config.clientID,
-            clientSecret: nil,
+            redirectURL: GoogleCalendarConfig.loopbackRedirectURI,
+            clientID: GoogleCalendarConfig.clientID,
+            clientSecret: clientSecret,
             scope: nil,
             refreshToken: refreshToken,
             codeVerifier: nil,
@@ -235,7 +239,7 @@ final class KeychainTokenStore: TokenStoreProtocol {
             kSecAttrAccount as String: "google-oauth-tokens",
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecUseDataProtectionKeychain as String: true
+            kSecUseDataProtectionKeychain as String: false
         ]
 
         SecItemDelete(query as CFDictionary)
@@ -251,7 +255,7 @@ final class KeychainTokenStore: TokenStoreProtocol {
             kSecAttrService as String: itemName,
             kSecAttrAccount as String: "google-oauth-tokens",
             kSecReturnData as String: true,
-            kSecUseDataProtectionKeychain as String: true
+            kSecUseDataProtectionKeychain as String: false
         ]
 
         var result: AnyObject?
@@ -273,7 +277,7 @@ final class KeychainTokenStore: TokenStoreProtocol {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: itemName,
             kSecAttrAccount as String: "google-oauth-tokens",
-            kSecUseDataProtectionKeychain as String: true
+            kSecUseDataProtectionKeychain as String: false
         ]
 
         let status = SecItemDelete(query as CFDictionary)

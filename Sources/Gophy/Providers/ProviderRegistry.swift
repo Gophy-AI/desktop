@@ -17,6 +17,8 @@ public final class ProviderRegistry: @unchecked Sendable {
         static let sttModel = "selectedSTTModel"
         static let visionProvider = "selectedVisionProvider"
         static let visionModel = "selectedVisionModel"
+        static let ttsProvider = "selectedTTSProvider"
+        static let ttsModel = "selectedTTSModel"
     }
 
     // MARK: - Properties
@@ -28,6 +30,7 @@ public final class ProviderRegistry: @unchecked Sendable {
     private let textGenerationEngine: any TextGenerationEngineProtocol
     private let embeddingEngine: any EmbeddingEngineProtocol
     private let ocrEngine: any OCREngineActorProtocol
+    private let ttsEngine: (any TTSEngineProtocol)?
 
     private var changeContinuation: AsyncStream<ProviderCapability>.Continuation?
     public let providerChangeStream: AsyncStream<ProviderCapability>
@@ -37,6 +40,7 @@ public final class ProviderRegistry: @unchecked Sendable {
     private var cachedEmbeddingProvider: (any EmbeddingProvider)?
     private var cachedSTTProvider: (any STTProvider)?
     private var cachedVisionProvider: (any VisionProvider)?
+    private var cachedTTSProvider: (any TTSProvider)?
 
     // MARK: - Init
 
@@ -46,7 +50,8 @@ public final class ProviderRegistry: @unchecked Sendable {
         transcriptionEngine: any TranscriptionEngineProtocol,
         textGenerationEngine: any TextGenerationEngineProtocol,
         embeddingEngine: any EmbeddingEngineProtocol,
-        ocrEngine: any OCREngineActorProtocol
+        ocrEngine: any OCREngineActorProtocol,
+        ttsEngine: (any TTSEngineProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.userDefaults = userDefaults
@@ -54,6 +59,7 @@ public final class ProviderRegistry: @unchecked Sendable {
         self.textGenerationEngine = textGenerationEngine
         self.embeddingEngine = embeddingEngine
         self.ocrEngine = ocrEngine
+        self.ttsEngine = ttsEngine
 
         var continuation: AsyncStream<ProviderCapability>.Continuation?
         self.providerChangeStream = AsyncStream { cont in
@@ -97,6 +103,14 @@ public final class ProviderRegistry: @unchecked Sendable {
         let provider = buildProvider(for: .vision) as? (any VisionProvider)
             ?? buildLocalVisionProvider()
         cachedVisionProvider = provider
+        return provider
+    }
+
+    public func activeTTSProvider() -> (any TTSProvider)? {
+        if let cached = cachedTTSProvider { return cached }
+        guard let ttsEngine else { return nil }
+        let provider = buildLocalTTSProvider(engine: ttsEngine)
+        cachedTTSProvider = provider
         return provider
     }
 
@@ -199,6 +213,8 @@ public final class ProviderRegistry: @unchecked Sendable {
             return (DefaultsKey.sttProvider, DefaultsKey.sttModel)
         case .vision:
             return (DefaultsKey.visionProvider, DefaultsKey.visionModel)
+        case .textToSpeech:
+            return (DefaultsKey.ttsProvider, DefaultsKey.ttsModel)
         }
     }
 
@@ -212,6 +228,8 @@ public final class ProviderRegistry: @unchecked Sendable {
             cachedSTTProvider = nil
         case .vision:
             cachedVisionProvider = nil
+        case .textToSpeech:
+            cachedTTSProvider = nil
         }
     }
 
@@ -251,7 +269,7 @@ public final class ProviderRegistry: @unchecked Sendable {
             return AnthropicProvider(apiKey: apiKey, textGenModel: modelId.isEmpty ? "claude-sonnet-4-5-20250929" : modelId)
         case .vision:
             return AnthropicProvider(apiKey: apiKey, visionModel: modelId.isEmpty ? "claude-sonnet-4-5-20250929" : modelId)
-        case .embedding, .speechToText:
+        case .embedding, .speechToText, .textToSpeech:
             return nil
         }
     }
@@ -311,6 +329,10 @@ public final class ProviderRegistry: @unchecked Sendable {
         let engine = ocrEngine as? VisionCapable
             ?? VisionCapableAdapter(engine: ocrEngine)
         return LocalVisionProvider(engine: engine)
+    }
+
+    private func buildLocalTTSProvider(engine: any TTSEngineProtocol) -> any TTSProvider {
+        return LocalTTSProvider(engine: engine)
     }
 }
 

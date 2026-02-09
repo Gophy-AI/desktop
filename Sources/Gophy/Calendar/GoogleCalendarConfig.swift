@@ -1,12 +1,24 @@
 import Foundation
 
 struct GoogleCalendarConfig: Sendable {
-    let clientID: String
-    let redirectURI: URL
+    static let clientID: String = {
+        guard let value = Bundle.main.infoDictionary?["GoogleClientID"] as? String, !value.isEmpty else {
+            return ""
+        }
+        return value
+    }()
+
+    static let clientSecret: String = {
+        guard let value = Bundle.main.infoDictionary?["GoogleClientSecret"] as? String, !value.isEmpty else {
+            return ""
+        }
+        return value
+    }()
+
     let scopes: [String]
 
     static let defaultScopes = [
-        "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events"
     ]
 
@@ -14,13 +26,11 @@ struct GoogleCalendarConfig: Sendable {
 
     static let loopbackRedirectURI = URL(string: "http://127.0.0.1")!
 
-    init(
-        clientID: String,
-        redirectURI: URL = GoogleCalendarConfig.loopbackRedirectURI,
-        scopes: [String] = GoogleCalendarConfig.defaultScopes
-    ) {
-        self.clientID = clientID
-        self.redirectURI = redirectURI
+    var isConfigured: Bool {
+        !GoogleCalendarConfig.clientID.isEmpty
+    }
+
+    init(scopes: [String] = GoogleCalendarConfig.defaultScopes) {
         self.scopes = scopes
     }
 }

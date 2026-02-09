@@ -359,19 +359,22 @@ class VoxtralRealtimeLanguageModel: Module {
 /// Sinusoidal time embedding for delay token conditioning.
 class VoxtralRealtimeTimeEmbedding: Module {
     let dim: Int
-    let invFreq: MLXArray
+    let theta: Float
 
     init(dim: Int = 32, theta: Float = 10000.0) {
         self.dim = dim
-        // inv_freq = exp(-log(theta) * arange(dim//2) / (dim//2))
-        let halfDim = dim / 2
-        let logTheta = -Foundation.log(theta)
-        let arange = MLXArray(Array(0..<halfDim).map { Float($0) })
-        self.invFreq = MLX.exp(logTheta * arange / Float(halfDim))
+        self.theta = theta
         super.init()
     }
 
     func callAsFunction(_ t: MLXArray) -> MLXArray {
+        // inv_freq is a computed constant, not a trained parameter —
+        // must not be a stored MLXArray property to avoid weight-loading mismatch
+        let halfDim = dim / 2
+        let logTheta = -Foundation.log(theta)
+        let arange = MLXArray(Array(0..<halfDim).map { Float($0) })
+        let invFreq = MLX.exp(logTheta * arange / Float(halfDim))
+
         // t: scalar or [B]
         let tReshaped = t.reshaped(-1, 1).asType(.float32)  // [B, 1]
         let emb = tReshaped * invFreq  // [B, dim//2]
@@ -462,7 +465,6 @@ nonisolated(unsafe) private let voxtralRealtimeMelFilters: MLXArray = {
 private func voxtralRealtimeLogMelSpectrogram(audio: MLXArray) -> MLXArray {
     let nFft = VoxtralRealtimeAudioConstants.nFft
     let hopLength = VoxtralRealtimeAudioConstants.hopLength
-    let nFreqs = nFft / 2 + 1
 
     // Hanning window matching Python: np.hanning(N_FFT+1)[:-1]
     let windowVals = (0..<nFft).map { Float(0.5 * (1.0 - Foundation.cos(2.0 * .pi * Double($0) / Double(nFft)))) }
@@ -474,30 +476,23 @@ private func voxtralRealtimeLogMelSpectrogram(audio: MLXArray) -> MLXArray {
 
     // Frame the signal
     let nFrames = 1 + (audioPadded.dim(0) - nFft) / hopLength
-    let t = MLXArray(Array(0..<nFft).map { Int32($0) }).expandedDimensions(axis: 0)    // [1, nFft]
-    let starts = MLXArray(Array(stride(from: 0, to: nFrames * hopLength, by: hopLength)).map { Int32($0) }).expandedDimensions(axis: 1) // [nFrames, 1]
-    let indices = starts + t  // [nFrames, nFft]
-    let frames = audioPadded[indices] * window  // [nFrames, nFft]
+    var frameSlices: [MLXArray] = []
+    for i in 0..<nFrames {
+        let start = i * hopLength
+        frameSlices.append(audioPadded[start..<(start + nFft)])
+    }
+    let frames = MLX.stacked(frameSlices, axis: 0) * window  // [nFrames, nFft]
 
-    // Manual DFT (real FFT for frequencies 0..nFreqs)
-    let kVals = (0..<nFreqs).map { Float($0) }
-    let nVals = (0..<nFft).map { Float($0) }
-    let k = MLXArray(kVals).reshaped(nFreqs, 1)   // [nFreqs, 1]
-    let n = MLXArray(nVals).reshaped(1, nFft)      // [1, nFft]
-    let angles = -2.0 * Float.pi * (k * n) / Float(nFft)  // [nFreqs, nFft]
-    let dftReal = MLX.cos(angles)
-    let dftImag = MLX.sin(angles)
+    // Real FFT (hardware-accelerated via Metal)
+    let fftResult = MLXFFT.rfft(frames, axis: 1)  // [nFrames, nFreqs] complex
 
-    let specReal = MLX.matmul(frames, dftReal.transposed(0, 1))  // [nFrames, nFreqs]
-    let specImag = MLX.matmul(frames, dftImag.transposed(0, 1))  // [nFrames, nFreqs]
-
-    // Power spectrum, drop last frame to match torch.stft(...)[..., :-1]
+    // Power spectrum, drop last frame to match torch.stft(...)[:-1]
     let nFramesTrunc = nFrames - 1
-    let magnitudes = specReal[0..<nFramesTrunc] ** 2 + specImag[0..<nFramesTrunc] ** 2
+    let magnitudes = MLX.abs(fftResult[0..<nFramesTrunc]).square()  // [nFrames-1, nFreqs]
 
     // Mel filterbank
     let melFilters = voxtralRealtimeMelFilters  // [nMels, nFreqs]
-    let melSpec = MLX.matmul(magnitudes, melFilters.transposed(0, 1))  // [nFrames-1, nMels]
+    let melSpec = MLX.matmul(magnitudes, melFilters.transposed(1, 0))  // [nFrames-1, nMels]
 
     // Log scale
     var logSpec = MLX.log10(MLX.maximum(melSpec, MLXArray(Float(1e-10))))
@@ -643,13 +638,10 @@ public class VoxtralRealtimeModel: Module {
 
     /// Find STREAMING_PAD token ID from tokenizer.
     private func findStreamingPadId() -> Int {
-        // [STREAMING_PAD] has rank=32 in Mistral's Tekken tokenizer (tekken.json).
-        // tokenizer.encode() tokenizes literal text, not special tokens, so we use the known ID.
-        if let tokenizer = tokenizer {
-            let encoded = tokenizer.encode(text: "[STREAMING_PAD]")
-            if encoded.count == 1 {
-                return encoded[0]
-            }
+        // [STREAMING_PAD] is special token ID 32 in Mistral's Tekkenizer convention.
+        if let tokenizer = tokenizer,
+           let id = tokenizer.convertTokenToId("[STREAMING_PAD]") {
+            return id
         }
         return 32
     }
@@ -751,7 +743,7 @@ public class VoxtralRealtimeModel: Module {
         let endTime = Date()
         Memory.clearCache()
 
-        let text = tokenizer.decode(tokens: outputTokens)
+        let text = tokenizer.decode(tokens: outputTokens, skipSpecialTokens: true)
         let totalTime = endTime.timeIntervalSince(startTime)
         let prefillTime = prefillEndTime.timeIntervalSince(startTime)
         let generateTime = endTime.timeIntervalSince(prefillEndTime)
@@ -831,8 +823,10 @@ public class VoxtralRealtimeModel: Module {
                     }
                     outputTokens.append(y)
 
-                    let tokenText = tokenizer.decode(tokens: [y])
-                    continuation.yield(.token(tokenText))
+                    let tokenText = tokenizer.decode(tokens: [y], skipSpecialTokens: true)
+                    if !tokenText.isEmpty {
+                        continuation.yield(.token(tokenText))
+                    }
 
                     let tokenEmbed = self.languageModel.embed(MLXArray([Int32(y)]).expandedDimensions(axis: 0)).squeezed(axes: [0, 1])
                     let stepEmbed = (audioEmbeds[pos] + tokenEmbed).expandedDimensions(axes: [0, 1])
@@ -849,8 +843,10 @@ public class VoxtralRealtimeModel: Module {
 
                 if y != self.eosTokenId && outputTokens.count < maxTokens {
                     outputTokens.append(y)
-                    let tokenText = tokenizer.decode(tokens: [y])
-                    continuation.yield(.token(tokenText))
+                    let tokenText = tokenizer.decode(tokens: [y], skipSpecialTokens: true)
+                    if !tokenText.isEmpty {
+                        continuation.yield(.token(tokenText))
+                    }
                 }
 
                 let endTime = Date()
@@ -872,7 +868,7 @@ public class VoxtralRealtimeModel: Module {
                 )
                 continuation.yield(.info(info))
 
-                let text = tokenizer.decode(tokens: outputTokens)
+                let text = tokenizer.decode(tokens: outputTokens, skipSpecialTokens: true)
                 let output = STTOutput(
                     text: text.trimmingCharacters(in: .whitespacesAndNewlines),
                     promptTokens: prefixLen,
@@ -935,14 +931,25 @@ public class VoxtralRealtimeModel: Module {
                 groupSize: groupSize,
                 bits: quantConfig.bits,
                 filter: { _, module in
-                    guard let linear = module as? Linear else { return false }
-                    return linear.weight.dim(-1) % groupSize == 0
+                    if let linear = module as? Linear {
+                        return linear.weight.dim(-1) % groupSize == 0
+                    }
+                    if let embedding = module as? Embedding {
+                        return embedding.weight.dim(-1) % groupSize == 0
+                    }
+                    return false
                 }
             )
         }
 
-        // Load tokenizer
-        model.tokenizer = try await AutoTokenizer.from(modelFolder: modelDir)
+        // Load tokenizer — Mistral models use tekken.json (tiktoken-style BPE),
+        // which swift-transformers' AutoTokenizer cannot parse. Use TekkenTokenizer directly.
+        let tekkenPath = modelDir.appendingPathComponent("tekken.json")
+        if FileManager.default.fileExists(atPath: tekkenPath.path) {
+            model.tokenizer = try TekkenTokenizer(url: tekkenPath)
+        } else {
+            model.tokenizer = try await AutoTokenizer.from(modelFolder: modelDir)
+        }
 
         // Load weights (single or sharded)
         var weights: [String: MLXArray] = [:]

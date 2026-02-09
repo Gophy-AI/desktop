@@ -23,8 +23,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "WhisperKit large-v3-turbo",
                 type: .stt,
                 huggingFaceID: "argmaxinc/whisperkit-coreml-large-v3-turbo",
-                approximateSizeGB: 1.5,
-                memoryUsageGB: 1.5,
+                approximateSizeGB: 1.6,
+                memoryUsageGB: 2.0,
                 source: .curated
             ),
             ModelDefinition(
@@ -32,8 +32,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Qwen2.5 7B Instruct 4-bit",
                 type: .textGen,
                 huggingFaceID: "mlx-community/Qwen2.5-7B-Instruct-4bit",
-                approximateSizeGB: 4.0,
-                memoryUsageGB: 4.0,
+                approximateSizeGB: 4.3,
+                memoryUsageGB: 5.5,
                 source: .curated
             ),
             ModelDefinition(
@@ -41,8 +41,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Qwen3 8B Instruct 4-bit",
                 type: .textGen,
                 huggingFaceID: "mlx-community/Qwen3-8B-4bit",
-                approximateSizeGB: 4.5,
-                memoryUsageGB: 4.5,
+                approximateSizeGB: 4.6,
+                memoryUsageGB: 6.0,
                 source: .curated
             ),
             ModelDefinition(
@@ -50,8 +50,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Qwen2.5-VL 7B Instruct 4-bit",
                 type: .ocr,
                 huggingFaceID: "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
-                approximateSizeGB: 5.3,
-                memoryUsageGB: 5.5,
+                approximateSizeGB: 5.6,
+                memoryUsageGB: 7.0,
                 source: .curated
             ),
             ModelDefinition(
@@ -59,8 +59,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Multilingual E5 Small (Embeddings)",
                 type: .embedding,
                 huggingFaceID: "intfloat/multilingual-e5-small",
-                approximateSizeGB: 0.47,
-                memoryUsageGB: 0.5,
+                approximateSizeGB: 0.9,
+                memoryUsageGB: 1.0,
                 source: .curated
             ),
             // TTS models
@@ -69,8 +69,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Soprano 80M",
                 type: .tts,
                 huggingFaceID: "mlx-community/Soprano-80M-bf16",
-                approximateSizeGB: 0.3,
-                memoryUsageGB: 0.4,
+                approximateSizeGB: 0.2,
+                memoryUsageGB: 0.3,
                 source: .curated
             ),
             ModelDefinition(
@@ -78,8 +78,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Marvis TTS 250M",
                 type: .tts,
                 huggingFaceID: "Marvis-AI/marvis-tts-250m-v0.2-MLX-8bit",
-                approximateSizeGB: 0.5,
-                memoryUsageGB: 0.6,
+                approximateSizeGB: 0.7,
+                memoryUsageGB: 0.9,
                 source: .curated
             ),
             ModelDefinition(
@@ -87,8 +87,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Orpheus 3B",
                 type: .tts,
                 huggingFaceID: "mlx-community/orpheus-3b-0.1-ft-bf16",
-                approximateSizeGB: 6.0,
-                memoryUsageGB: 6.5,
+                approximateSizeGB: 6.6,
+                memoryUsageGB: 7.5,
                 source: .curated
             ),
             ModelDefinition(
@@ -96,8 +96,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "VyvoTTS EN",
                 type: .tts,
                 huggingFaceID: "mlx-community/VyvoTTS-EN-Beta-4bit",
-                approximateSizeGB: 2.0,
-                memoryUsageGB: 2.5,
+                approximateSizeGB: 1.0,
+                memoryUsageGB: 1.5,
                 source: .curated
             ),
             ModelDefinition(
@@ -105,8 +105,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "PocketTTS",
                 type: .tts,
                 huggingFaceID: "mlx-community/pocket-tts",
-                approximateSizeGB: 0.3,
-                memoryUsageGB: 0.4,
+                approximateSizeGB: 0.2,
+                memoryUsageGB: 0.3,
                 source: .curated
             ),
             // MLX STT models (audioRegistry)
@@ -115,8 +115,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "GLM-ASR Large v2",
                 type: .stt,
                 huggingFaceID: "THUDM/glm-4-voice-tokenizer",
-                approximateSizeGB: 2.0,
-                memoryUsageGB: 2.5,
+                approximateSizeGB: 1.5,
+                memoryUsageGB: 1.8,
                 source: .audioRegistry
             ),
             ModelDefinition(
@@ -133,7 +133,7 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Whisper Large v3 (MLX)",
                 type: .stt,
                 huggingFaceID: "mlx-community/whisper-large-v3",
-                approximateSizeGB: 3.0,
+                approximateSizeGB: 3.1,
                 memoryUsageGB: 3.5,
                 source: .audioRegistry
             ),
@@ -142,8 +142,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Parakeet CTC 1.1B",
                 type: .stt,
                 huggingFaceID: "nvidia/parakeet-ctc-1.1b",
-                approximateSizeGB: 2.2,
-                memoryUsageGB: 2.5,
+                approximateSizeGB: 4.3,
+                memoryUsageGB: 5.0,
                 source: .audioRegistry
             ),
             ModelDefinition(
@@ -151,8 +151,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Qwen3 ASR",
                 type: .stt,
                 huggingFaceID: "Qwen/Qwen3-ASR",
-                approximateSizeGB: 4.0,
-                memoryUsageGB: 4.5,
+                approximateSizeGB: 4.7,
+                memoryUsageGB: 6.0,
                 source: .audioRegistry
             ),
             ModelDefinition(
@@ -160,7 +160,7 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Wav2Vec2 Large 960h",
                 type: .stt,
                 huggingFaceID: "facebook/wav2vec2-large-960h-lv60-self",
-                approximateSizeGB: 1.2,
+                approximateSizeGB: 1.3,
                 memoryUsageGB: 1.5,
                 source: .audioRegistry
             ),
@@ -169,8 +169,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Voxtral Mini",
                 type: .stt,
                 huggingFaceID: "mlx-community/Voxtral-Mini-3B-2507-bf16",
-                approximateSizeGB: 6.0,
-                memoryUsageGB: 6.5,
+                approximateSizeGB: 9.4,
+                memoryUsageGB: 10.5,
                 source: .audioRegistry
             ),
             ModelDefinition(
@@ -178,8 +178,8 @@ public final class DynamicModelRegistry: ModelRegistryProtocol, Sendable {
                 name: "Voxtral Mini 4B Realtime",
                 type: .stt,
                 huggingFaceID: "mlx-community/Voxtral-Mini-4B-Realtime-6bit",
-                approximateSizeGB: 3.0,
-                memoryUsageGB: 4.0,
+                approximateSizeGB: 3.6,
+                memoryUsageGB: 6.0,
                 source: .audioRegistry
             )
         ])

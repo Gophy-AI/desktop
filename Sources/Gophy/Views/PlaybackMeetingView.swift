@@ -10,10 +10,12 @@ struct PlaybackMeetingView: View {
     @State private var editingSpeaker: SpeakerIdentifier?
     @State private var editingSpeakerName: String = ""
     let onDismiss: () -> Void
+    var ttsPlaybackService: TTSPlaybackService?
 
-    init(viewModel: PlaybackMeetingViewModel, onDismiss: @escaping () -> Void) {
+    init(viewModel: PlaybackMeetingViewModel, onDismiss: @escaping () -> Void, ttsPlaybackService: TTSPlaybackService? = nil) {
         self._viewModel = State(initialValue: viewModel)
         self.onDismiss = onDismiss
+        self.ttsPlaybackService = ttsPlaybackService
     }
 
     var body: some View {
@@ -55,7 +57,8 @@ struct PlaybackMeetingView: View {
                     isGenerating: viewModel.isGeneratingSuggestion,
                     onRefresh: {
                         await viewModel.refreshSuggestions()
-                    }
+                    },
+                    ttsPlaybackService: ttsPlaybackService
                 )
             }
         }

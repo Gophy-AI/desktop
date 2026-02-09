@@ -7,6 +7,11 @@ cd "$(dirname "$0")"
 # swift build doesn't compile .metal files
 
 # Build using xcodebuild (compiles Metal shaders)
+if [ ! -f "Secrets.xcconfig" ]; then
+    echo "Warning: Secrets.xcconfig not found. Google OAuth will not work."
+    echo "Copy Secrets.xcconfig.example to Secrets.xcconfig and fill in the values."
+fi
+
 echo "Building with xcodebuild..."
 xcodebuild \
     -scheme Gophy \
@@ -27,8 +32,18 @@ mkdir -p "$APP_DIR/Contents/Frameworks"
 # Copy main executable
 cp .build/xcode/Build/Products/Debug/Gophy "$APP_DIR/Contents/MacOS/"
 
-# Copy Info.plist
+# Copy Info.plist and substitute secrets from xcconfig
 cp Sources/Gophy/Info.plist "$APP_DIR/Contents/"
+if [ -f "Secrets.xcconfig" ]; then
+    _client_id=$(grep '^GOOGLE_CLIENT_ID' Secrets.xcconfig | head -1 | cut -d'=' -f2- | xargs)
+    _client_secret=$(grep '^GOOGLE_CLIENT_SECRET' Secrets.xcconfig | head -1 | cut -d'=' -f2- | xargs)
+    if [ -n "$_client_id" ]; then
+        plutil -replace GoogleClientID -string "$_client_id" "$APP_DIR/Contents/Info.plist"
+    fi
+    if [ -n "$_client_secret" ]; then
+        plutil -replace GoogleClientSecret -string "$_client_secret" "$APP_DIR/Contents/Info.plist"
+    fi
+fi
 
 # Copy app icon
 if [ -f Resources/AppIcon.icns ]; then

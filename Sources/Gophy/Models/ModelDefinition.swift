@@ -5,6 +5,7 @@ public enum ModelType: String, Codable, Sendable {
     case textGen
     case ocr
     case embedding
+    case tts
 }
 
 public enum ModelSource: String, Codable, Sendable {
@@ -12,6 +13,7 @@ public enum ModelSource: String, Codable, Sendable {
     case llmRegistry
     case vlmRegistry
     case embeddersRegistry
+    case audioRegistry
 }
 
 public struct ModelDefinition: Sendable, Identifiable {

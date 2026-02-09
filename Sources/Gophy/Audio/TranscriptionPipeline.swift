@@ -37,8 +37,8 @@ public actor TranscriptionPipeline {
     private var processingTask: Task<Void, Never>?
 
     // Sliding window configuration
-    private let minBufferDurationSeconds: TimeInterval = 2.0
-    private let maxBufferDurationSeconds: TimeInterval = 5.0
+    private let minBufferDurationSeconds: TimeInterval = 5.0
+    private let maxBufferDurationSeconds: TimeInterval = 15.0
 
     private struct AudioBuffer {
         var samples: [Float] = []
@@ -170,8 +170,8 @@ public actor TranscriptionPipeline {
                     pipelineLogger.info("Pipeline: buffer ready, scheduling transcription for [\(speaker, privacy: .public)]...")
                     scheduleTranscription(speaker: speaker, generation: gen)
                 } else if duration >= maxBufferDurationSeconds && activeTranscriptions.contains(speaker) {
-                    // Buffer growing too large while transcription is active - trim oldest samples
-                    let targetSamples = Int(minBufferDurationSeconds * 16000.0)
+                    // Buffer growing too large while transcription is active - trim oldest samples, keep 10s context
+                    let targetSamples = Int(10.0 * 16000.0)
                     let excess = buffers[speaker]!.samples.count - targetSamples
                     if excess > 0 {
                         buffers[speaker]!.samples.removeFirst(excess)

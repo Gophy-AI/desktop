@@ -130,7 +130,7 @@ final class GoogleAuthServiceTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        config = GoogleCalendarConfig(clientID: "test-client-id")
+        config = GoogleCalendarConfig()
         mockOAuthProvider = MockOAuthProvider()
         mockTokenStore = MockTokenStore()
         authService = GoogleAuthService(

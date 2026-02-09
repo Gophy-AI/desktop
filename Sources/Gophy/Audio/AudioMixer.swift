@@ -72,12 +72,9 @@ public final class AudioMixer: Sendable {
     }
 
     private func labelChunk(_ chunk: AudioChunk, speaker: String) -> LabeledAudioChunk {
-        // Use monotonic clock for timestamp alignment
-        let monotonicTimestamp = ProcessInfo.processInfo.systemUptime
-
         return LabeledAudioChunk(
             samples: chunk.samples,
-            timestamp: monotonicTimestamp,
+            timestamp: chunk.timestamp,
             speaker: speaker
         )
     }

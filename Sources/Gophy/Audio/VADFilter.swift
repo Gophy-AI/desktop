@@ -61,7 +61,7 @@ public final class VADFilter: Sendable {
     /// - Parameters:
     ///   - thresholdDB: Energy threshold in decibels (default -40 dB)
     ///   - holdOpenWindowSeconds: Duration to keep passing audio after speech (default 0.3s)
-    public init(thresholdDB: Float = -40, holdOpenWindowSeconds: TimeInterval = 0.3) {
+    public init(thresholdDB: Float = -50, holdOpenWindowSeconds: TimeInterval = 0.8) {
         self.thresholdDB = thresholdDB
         self.holdOpenWindowSeconds = holdOpenWindowSeconds
 

@@ -5,6 +5,7 @@ struct SuggestionPanelView: View {
     let suggestions: [ChatMessageRecord]
     let isGenerating: Bool
     let onRefresh: () async -> Void
+    var ttsPlaybackService: TTSPlaybackService?
 
     @State private var expandedSuggestions: Set<String> = []
 
@@ -69,7 +70,8 @@ struct SuggestionPanelView: View {
                                 isExpanded: expandedSuggestions.contains(suggestion.id),
                                 onToggle: {
                                     toggleExpanded(suggestion.id)
-                                }
+                                },
+                                ttsPlaybackService: ttsPlaybackService
                             )
                         }
                     }
@@ -96,6 +98,7 @@ struct SuggestionItemView: View {
     let suggestion: ChatMessageRecord
     let isExpanded: Bool
     let onToggle: () -> Void
+    var ttsPlaybackService: TTSPlaybackService?
 
     private var timeAgo: String {
         let interval = Date().timeIntervalSince(suggestion.createdAt)
@@ -110,6 +113,16 @@ struct SuggestionItemView: View {
         }
     }
 
+    private var isPlayingThis: Bool {
+        guard let service = ttsPlaybackService else { return false }
+        return service.isPlaying && service.currentText == suggestion.content
+    }
+
+    private var isLoadingThis: Bool {
+        guard let service = ttsPlaybackService else { return false }
+        return service.isLoading && service.currentText == suggestion.content
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -122,6 +135,10 @@ struct SuggestionItemView: View {
                     .foregroundStyle(.secondary)
 
                 Spacer()
+
+                if let service = ttsPlaybackService {
+                    ttsButton(service: service)
+                }
 
                 Button(action: onToggle) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -147,6 +164,36 @@ struct SuggestionItemView: View {
         .padding(12)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func ttsButton(service: TTSPlaybackService) -> some View {
+        if isLoadingThis {
+            SwiftUI.ProgressView()
+                .controlSize(.small)
+                .frame(width: 16, height: 16)
+        } else if isPlayingThis {
+            Button(action: {
+                service.stop()
+            }) {
+                Image(systemName: "stop.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .help("Stop reading")
+        } else {
+            Button(action: {
+                service.play(text: suggestion.content)
+            }) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(service.isPlaying || service.isLoading)
+            .help("Read aloud")
+        }
     }
 }
 

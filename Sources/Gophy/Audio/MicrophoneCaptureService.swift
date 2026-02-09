@@ -86,14 +86,15 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
 
         // Set the input device
         _ = audioEngine.inputNode
-        try audioEngine.inputNode.auAudioUnit.inputBusses[0].setFormat(
-            AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: targetSampleRate,
-                channels: 1,
-                interleaved: false
-            )!
-        )
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: targetSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw AudioCaptureError.formatCreationFailed
+        }
+        try audioEngine.inputNode.auAudioUnit.inputBusses[0].setFormat(format)
         #endif
     }
 
@@ -128,9 +129,18 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
         }
 
         // Create converter if formats differ
+        // The tap extracts channel 0, so input to converter is always mono
         if inputFormat.sampleRate != targetFormat.sampleRate ||
            inputFormat.channelCount != targetFormat.channelCount {
-            guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            guard let monoInputFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: inputFormat.sampleRate,
+                channels: 1,
+                interleaved: false
+            ) else {
+                throw AudioCaptureError.formatCreationFailed
+            }
+            guard let converter = AVAudioConverter(from: monoInputFormat, to: targetFormat) else {
                 throw AudioCaptureError.converterCreationFailed
             }
             audioConverter = converter
@@ -176,33 +186,59 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
     ) {
         guard let continuation = continuation else { return }
 
-        var processedSamples = samples
+        var processedSamples: [Float]
 
-        // Convert if necessary (resample + convert to mono)
-        if sampleRate != targetSampleRate || channelCount != 1 {
-            // Simple conversion: if multi-channel, average them; if different sample rate, simple resampling
-            if channelCount > 1 {
-                // Convert multi-channel to mono by averaging
-                // Note: this is a simplified approach; in production, use AVAudioConverter
-                processedSamples = samples
-            }
+        if let converter = audioConverter {
+            // Use AVAudioConverter for proper anti-aliased resampling
+            let frameCount = AVAudioFrameCount(samples.count)
+            guard let inputBuffer = AVAudioPCMBuffer(
+                pcmFormat: converter.inputFormat,
+                frameCapacity: frameCount
+            ) else { return }
+            inputBuffer.frameLength = frameCount
 
-            // Simple resampling if needed (in production, use AVAudioConverter properly)
-            if sampleRate != targetSampleRate {
-                let ratio = targetSampleRate / sampleRate
-                let targetLength = Int(Double(processedSamples.count) * ratio)
-                var resampled = [Float]()
-                resampled.reserveCapacity(targetLength)
-
-                for i in 0..<targetLength {
-                    let sourceIndex = Double(i) / ratio
-                    let index = Int(sourceIndex)
-                    if index < processedSamples.count {
-                        resampled.append(processedSamples[index])
-                    }
+            // Copy samples into input buffer
+            if let channelData = inputBuffer.floatChannelData {
+                samples.withUnsafeBufferPointer { src in
+                    guard let base = src.baseAddress else { return }
+                    channelData[0].update(from: base, count: samples.count)
                 }
-                processedSamples = resampled
             }
+
+            // Calculate output frame count based on sample rate ratio
+            let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
+            let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
+            guard let outputBuffer = AVAudioPCMBuffer(
+                pcmFormat: converter.outputFormat,
+                frameCapacity: outputFrameCount
+            ) else { return }
+
+            var error: NSError?
+            var inputConsumed = false
+            let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                if inputConsumed {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                inputConsumed = true
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+
+            guard status != .error, error == nil else {
+                audioLogger.error("AVAudioConverter failed: \(error?.localizedDescription ?? "unknown", privacy: .public)")
+                return
+            }
+
+            let count = Int(outputBuffer.frameLength)
+            if let outData = outputBuffer.floatChannelData {
+                processedSamples = Array(UnsafeBufferPointer(start: outData[0], count: count))
+            } else {
+                return
+            }
+        } else {
+            // Formats already match, pass through directly
+            processedSamples = samples
         }
 
         // Add to buffer
@@ -214,8 +250,8 @@ public actor MicrophoneCaptureService: AudioCaptureProtocol, MicrophoneCapturePr
             self.buffer.removeFirst(chunkSize)
 
             let timestamp = isSampleTimeValid
-                ? Double(sampleTime) / targetSampleRate
-                : 0.0
+                ? Double(sampleTime) / sampleRate
+                : ProcessInfo.processInfo.systemUptime
 
             let chunk = AudioChunk(
                 samples: chunkSamples,

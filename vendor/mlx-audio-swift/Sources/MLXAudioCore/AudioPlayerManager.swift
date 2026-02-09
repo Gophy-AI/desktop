@@ -31,8 +31,7 @@ public class AudioPlayerManager: NSObject, ObservableObject {
         super.init()
     }
 
-    @MainActor deinit {
-        stop()
+    deinit {
     }
 
     // MARK: - Playback Control
@@ -240,7 +239,7 @@ public class AudioPlayerManager: NSObject, ObservableObject {
 
 // MARK: - AVAudioPlayerDelegate
 
-extension AudioPlayerManager: @MainActor AVAudioPlayerDelegate {
+extension AudioPlayerManager: @preconcurrency AVAudioPlayerDelegate {
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         isPlaying = false
         stopTimer()

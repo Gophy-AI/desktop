@@ -34,16 +34,40 @@ public protocol OCREngineActorProtocol: Sendable {
     func unload() async
 }
 
+public protocol TTSEngineProtocol: Sendable {
+    var isLoaded: Bool { get }
+    func load() async throws
+    func synthesize(text: String, voice: String?) async throws -> [Float]
+    func synthesizeStream(text: String, voice: String?) -> AsyncThrowingStream<[Float], Error>
+    func unload()
+}
+
 extension TranscriptionEngine: TranscriptionEngineProtocol {}
 extension TextGenerationEngine: TextGenerationEngineProtocol {}
 extension EmbeddingEngine: EmbeddingEngineProtocol {}
 extension OCREngine: OCREngineActorProtocol {}
+extension MLXSTTEngine: TranscriptionEngineProtocol {}
+extension MLXSTTEngine: PipelineTranscriptionProtocol {}
+extension TTSEngine: TTSEngineProtocol {}
+
+public enum ModeControllerError: Error, LocalizedError {
+    case engineNotPipelineCompatible
+
+    public var errorDescription: String? {
+        switch self {
+        case .engineNotPipelineCompatible:
+            return "Resolved STT engine does not support pipeline transcription"
+        }
+    }
+}
 
 public final class ModeController: @unchecked Sendable {
     private let transcriptionEngine: any TranscriptionEngineProtocol
+    private let mlxSTTEngine: (any TranscriptionEngineProtocol)?
     private let textGenerationEngine: any TextGenerationEngineProtocol
     private let embeddingEngine: any EmbeddingEngineProtocol
     private let ocrEngine: any OCREngineActorProtocol
+    private let ttsEngine: (any TTSEngineProtocol)?
     private let modelRegistry: any ModelRegistryProtocol
     private let providerRegistry: ProviderRegistry?
     private var providerChangeTask: Task<Void, Never>?
@@ -73,12 +97,16 @@ public final class ModeController: @unchecked Sendable {
         embeddingEngine: any EmbeddingEngineProtocol,
         ocrEngine: any OCREngineActorProtocol,
         modelRegistry: any ModelRegistryProtocol = ModelRegistry.shared,
-        providerRegistry: ProviderRegistry? = nil
+        providerRegistry: ProviderRegistry? = nil,
+        mlxSTTEngine: (any TranscriptionEngineProtocol)? = nil,
+        ttsEngine: (any TTSEngineProtocol)? = nil
     ) {
         self.transcriptionEngine = transcriptionEngine
+        self.mlxSTTEngine = mlxSTTEngine
         self.textGenerationEngine = textGenerationEngine
         self.embeddingEngine = embeddingEngine
         self.ocrEngine = ocrEngine
+        self.ttsEngine = ttsEngine
         self.modelRegistry = modelRegistry
         self.providerRegistry = providerRegistry
 
@@ -192,9 +220,11 @@ public final class ModeController: @unchecked Sendable {
 
             // Only load local transcription engine if using local provider
             if !sttIsCloud {
-                if !transcriptionEngine.isLoaded {
+                // Determine which STT engine to use based on selected model source
+                let selectedSTTEngine = resolveSTTEngine()
+                if !selectedSTTEngine.isLoaded {
                     modeLogger.info("Loading transcription engine...")
-                    try await transcriptionEngine.load()
+                    try await selectedSTTEngine.load()
                     modeLogger.info("Transcription engine loaded")
                 } else {
                     modeLogger.info("Transcription engine already loaded")
@@ -232,6 +262,7 @@ public final class ModeController: @unchecked Sendable {
         switch currentMode {
         case .meeting:
             transcriptionEngine.unload()
+            mlxSTTEngine?.unload()
             textGenerationEngine.unload()
 
         case .document:
@@ -255,6 +286,38 @@ public final class ModeController: @unchecked Sendable {
                 return
             }
         }
+    }
+
+    /// Resolve which STT engine to use based on the selected model's source.
+    /// Returns MLXSTTEngine for .audioRegistry models, WhisperKit for .curated models.
+    public func resolveSTTEngine() -> any TranscriptionEngineProtocol {
+        let selectedId = UserDefaults.standard.string(forKey: "selectedSTTModelId") ?? "whisperkit-large-v3-turbo"
+        let sttModels = modelRegistry.availableModels().filter { $0.type == .stt }
+
+        if let selectedModel = sttModels.first(where: { $0.id == selectedId }),
+           selectedModel.source == .audioRegistry,
+           let mlxEngine = mlxSTTEngine {
+            modeLogger.info("Using MLX STT engine for model: \(selectedModel.id, privacy: .public)")
+            return mlxEngine
+        }
+
+        modeLogger.info("Using WhisperKit transcription engine")
+        return transcriptionEngine
+    }
+
+    /// Create a TranscriptionPipeline with the correctly resolved STT engine.
+    /// Loads the engine if not already loaded.
+    public func createTranscriptionPipeline(vadFilter: VADFilter = VADFilter()) async throws -> TranscriptionPipeline {
+        let engine = resolveSTTEngine()
+        if !engine.isLoaded {
+            try await engine.load()
+        }
+        // Both TranscriptionEngine and MLXSTTEngine conform to PipelineTranscriptionProtocol
+        guard let pipelineEngine = engine as? any PipelineTranscriptionProtocol else {
+            modeLogger.error("Resolved STT engine does not conform to PipelineTranscriptionProtocol")
+            throw ModeControllerError.engineNotPipelineCompatible
+        }
+        return TranscriptionPipeline(transcriptionEngine: pipelineEngine, vadFilter: vadFilter)
     }
 
     private func setState(_ state: ModeState) {

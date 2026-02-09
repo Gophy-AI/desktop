@@ -377,6 +377,7 @@ extension ProviderCapability {
         case .embedding: return "Embedding"
         case .speechToText: return "STT"
         case .vision: return "Vision"
+        case .textToSpeech: return "TTS"
         }
     }
 }

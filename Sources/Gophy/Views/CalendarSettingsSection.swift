@@ -37,43 +37,11 @@ struct CalendarSettingsSection: View {
 
     // MARK: - Google Account
 
-    @State private var clientIDInput: String = ""
-    @State private var hasInitializedClientID = false
-
     private var googleAccountSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Google Account")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("OAuth Client ID")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack {
-                    TextField("Google OAuth Client ID", text: $clientIDInput)
-                        .textFieldStyle(.roundedBorder)
-                        .onAppear {
-                            if !hasInitializedClientID {
-                                clientIDInput = viewModel.googleClientID
-                                hasInitializedClientID = true
-                            }
-                        }
-                        .onSubmit {
-                            viewModel.updateGoogleClientID(clientIDInput)
-                        }
-
-                    Button("Save") {
-                        viewModel.updateGoogleClientID(clientIDInput)
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Text("Create an OAuth 2.0 Client ID in the Google Cloud Console with Desktop app type")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
 
             HStack {
                 HStack(spacing: 8) {
@@ -105,7 +73,7 @@ struct CalendarSettingsSection: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.isSigningIn || viewModel.googleClientID.isEmpty)
+                    .disabled(viewModel.isSigningIn)
                 }
             }
 

@@ -49,6 +49,7 @@ actor CalendarSyncService {
     private var cachedEvents: [UnifiedCalendarEvent] = []
     private var pollingTask: Task<Void, Never>?
     private var streamContinuation: AsyncStream<[UnifiedCalendarEvent]>.Continuation?
+    private(set) var lastGoogleError: (any Error)?
 
     init(
         apiClient: any GoogleCalendarAPIClientProtocol,
@@ -153,7 +154,8 @@ actor CalendarSyncService {
                 syncTokenStore.setSyncToken(nextToken)
             }
         } catch {
-            logger.warning("Google Calendar fetch failed: \(error.localizedDescription, privacy: .public). Using EventKit only.")
+            logger.warning("Google Calendar fetch failed: \(error.localizedDescription, privacy: .public)")
+            lastGoogleError = error
         }
 
         let merged = mergeEvents(google: googleEvents, local: localEvents)

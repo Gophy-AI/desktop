@@ -30,6 +30,7 @@ public final class CalendarMeetingsViewModel {
     let chatMessageRepository: ChatMessageRepository
     let documentRepository: DocumentRepository
     private let eventKitService: EventKitService?
+    private let calendarSyncService: (any CalendarSyncServiceProtocol)?
 
     private let calendar = Calendar.current
     private let timeFormatter: DateFormatter = {
@@ -51,12 +52,14 @@ public final class CalendarMeetingsViewModel {
         meetingRepository: MeetingRepository,
         chatMessageRepository: ChatMessageRepository,
         documentRepository: DocumentRepository,
-        eventKitService: EventKitService? = nil
+        eventKitService: EventKitService? = nil,
+        calendarSyncService: (any CalendarSyncServiceProtocol)? = nil
     ) {
         self.meetingRepository = meetingRepository
         self.chatMessageRepository = chatMessageRepository
         self.documentRepository = documentRepository
         self.eventKitService = eventKitService
+        self.calendarSyncService = calendarSyncService
     }
 
     // MARK: - Data Loading
@@ -73,13 +76,21 @@ public final class CalendarMeetingsViewModel {
     }
 
     func loadCalendarEvents() async {
+        if let syncService = calendarSyncService {
+            do {
+                calendarEvents = try await syncService.syncNow()
+                return
+            } catch {
+                // Fall through to EventKit-only
+            }
+        }
+
         guard let service = eventKitService else { return }
 
         do {
             let granted = try await service.requestAccess()
             guard granted else { return }
         } catch {
-            // Calendar access not available; skip silently
             return
         }
 

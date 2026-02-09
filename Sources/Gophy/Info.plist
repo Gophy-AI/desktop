@@ -28,5 +28,9 @@
     <string>AppIcon</string>
     <key>NSCalendarsUsageDescription</key>
     <string>Gophy accesses your calendar to show upcoming meetings, auto-start recording, and write meeting summaries.</string>
+    <key>GoogleClientID</key>
+    <string></string>
+    <key>GoogleClientSecret</key>
+    <string></string>
 </dict>
 </plist>

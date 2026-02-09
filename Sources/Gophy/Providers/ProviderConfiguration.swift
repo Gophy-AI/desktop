@@ -5,6 +5,7 @@ public enum ProviderCapability: String, Codable, Sendable, Hashable, CaseIterabl
     case embedding
     case speechToText
     case vision
+    case textToSpeech
 }
 
 public struct CloudModelDefinition: Sendable, Codable, Identifiable {

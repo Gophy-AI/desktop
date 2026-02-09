@@ -60,7 +60,7 @@ struct VADFilterTests {
         let speechResult = filter.filter(chunk: speechChunk)
         #expect(speechResult != nil)
 
-        // Now pass a silent chunk within hold-open window (< 300ms)
+        // Now pass a silent chunk within hold-open window (< 800ms)
         let silentChunk = LabeledAudioChunk(
             samples: Array(repeating: 0.0, count: 16000),
             timestamp: 0.1, // 100ms later
@@ -116,7 +116,7 @@ struct VADFilterTests {
         #expect(latency < 0.001, "Filter should add less than 1ms latency")
     }
 
-    @Test("hold-open expires after 300ms of silence")
+    @Test("hold-open expires after 800ms of silence")
     func testHoldOpenExpires() async throws {
         let filter = VADFilter()
 
@@ -131,10 +131,10 @@ struct VADFilterTests {
         )
         _ = filter.filter(chunk: speechChunk)
 
-        // Pass a silent chunk after hold-open window expires (> 300ms)
+        // Pass a silent chunk after hold-open window expires (> 800ms)
         let silentChunk = LabeledAudioChunk(
             samples: Array(repeating: 0.0, count: 16000),
-            timestamp: 0.4, // 400ms later
+            timestamp: 0.9, // 900ms later
             speaker: "You"
         )
         let silentResult = filter.filter(chunk: silentChunk)

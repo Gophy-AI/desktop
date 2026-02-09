@@ -6,6 +6,7 @@ private let logger = Logger(subsystem: "com.gophy.app", category: "MeetingContai
 @MainActor
 struct MeetingContainerView: View {
     @State private var viewModel: MeetingViewModel?
+    @State private var ttsPlaybackService: TTSPlaybackService?
     @State private var initError: String?
     @State private var isInitializing = true
     let onDismiss: () -> Void
@@ -15,7 +16,7 @@ struct MeetingContainerView: View {
             if let errorMessage = initError {
                 modelsRequiredView(message: errorMessage)
             } else if let viewModel = viewModel {
-                MeetingView(viewModel: viewModel)
+                MeetingView(viewModel: viewModel, ttsPlaybackService: ttsPlaybackService)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") {
@@ -98,19 +99,47 @@ struct MeetingContainerView: View {
             let transcriptionEngine = TranscriptionEngine()
             let textGenerationEngine = TextGenerationEngine()
             let embeddingEngine = EmbeddingEngine()
-            logger.info("Created engines")
 
-            // Load transcription engine (required)
-            if !transcriptionEngine.isLoaded {
-                logger.info("Loading transcription engine...")
-                try await transcriptionEngine.load()
-                logger.info("Transcription engine loaded")
-            }
+            // Create MLX STT engine
+            let mlxSTTEngine = MLXSTTEngine()
+            logger.info("Created MLX STT engine")
+
+            // Create TTS engine
+            let ttsEngine = TTSEngine()
+            logger.info("Created TTS engine")
+
+            logger.info("Created engines")
 
             // Skip loading text generation and embedding during meeting init
             // to avoid memory pressure. They load ~8GB combined with transcription.
             // Suggestions will work without them (just won't have RAG context).
             logger.info("Skipping text generation and embedding engines (loaded on-demand)")
+
+            // Create OCR engine for mode controller
+            let ocrEngine = OCREngine()
+            logger.info("Created OCREngine")
+
+            // Create provider registry with all engines
+            let providerRegistry = ProviderRegistry(
+                transcriptionEngine: transcriptionEngine,
+                textGenerationEngine: textGenerationEngine,
+                embeddingEngine: embeddingEngine,
+                ocrEngine: ocrEngine,
+                ttsEngine: ttsEngine
+            )
+            logger.info("Created ProviderRegistry")
+
+            // Create mode controller (must be created before pipeline to resolve engine)
+            let modeController = ModeController(
+                transcriptionEngine: transcriptionEngine,
+                textGenerationEngine: textGenerationEngine,
+                embeddingEngine: embeddingEngine,
+                ocrEngine: ocrEngine,
+                providerRegistry: providerRegistry,
+                mlxSTTEngine: mlxSTTEngine,
+                ttsEngine: ttsEngine
+            )
+            logger.info("Created ModeController")
 
             logger.info("Creating audio components...")
             // Create audio components (don't start yet - MeetingSessionController will start them)
@@ -120,15 +149,8 @@ struct MeetingContainerView: View {
             let systemCapture = SystemAudioCaptureService()
             logger.info("Created SystemAudioCaptureService")
 
-            // Create VAD filter
-            let vadFilter = VADFilter()
-            logger.info("Created VADFilter")
-
-            // Create transcription pipeline
-            let transcriptionPipeline = TranscriptionPipeline(
-                transcriptionEngine: transcriptionEngine,
-                vadFilter: vadFilter
-            )
+            // Create transcription pipeline with resolved STT engine
+            let transcriptionPipeline = try await modeController.createTranscriptionPipeline()
             logger.info("Created TranscriptionPipeline")
 
             // Create vector search and embedding pipeline
@@ -140,19 +162,6 @@ struct MeetingContainerView: View {
                 documentRepository: documentRepo
             )
             logger.info("Created EmbeddingPipeline")
-
-            // Create OCR engine for mode controller
-            let ocrEngine = OCREngine()
-            logger.info("Created OCREngine")
-
-            // Create mode controller
-            let modeController = ModeController(
-                transcriptionEngine: transcriptionEngine,
-                textGenerationEngine: textGenerationEngine,
-                embeddingEngine: embeddingEngine,
-                ocrEngine: ocrEngine
-            )
-            logger.info("Created ModeController")
 
             // Create suggestion engine
             let suggestionEngine = SuggestionEngine(
@@ -175,6 +184,10 @@ struct MeetingContainerView: View {
                 systemAudioCapture: systemCapture
             )
             logger.info("Created MeetingSessionController")
+
+            // Create TTS playback service
+            self.ttsPlaybackService = TTSPlaybackService(ttsEngine: ttsEngine)
+            logger.info("Created TTSPlaybackService")
 
             viewModel = MeetingViewModel(
                 sessionController: sessionController,

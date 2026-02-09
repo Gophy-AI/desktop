@@ -10,6 +10,7 @@ struct PlaybackMeetingContainerView: View {
     let onDismiss: () -> Void
 
     @State private var viewModel: PlaybackMeetingViewModel?
+    @State private var ttsPlaybackService: TTSPlaybackService?
     @State private var initError: String?
 
     var body: some View {
@@ -17,7 +18,7 @@ struct PlaybackMeetingContainerView: View {
             if let errorMessage = initError {
                 errorView(message: errorMessage)
             } else if let viewModel = viewModel {
-                PlaybackMeetingView(viewModel: viewModel, onDismiss: onDismiss)
+                PlaybackMeetingView(viewModel: viewModel, onDismiss: onDismiss, ttsPlaybackService: ttsPlaybackService)
             } else {
                 VStack(spacing: 16) {
                     SwiftUI.ProgressView()
@@ -81,21 +82,37 @@ struct PlaybackMeetingContainerView: View {
             let transcriptionEngine = TranscriptionEngine()
             let textGenerationEngine = TextGenerationEngine()
             let embeddingEngine = EmbeddingEngine()
+            let mlxSTTEngine = MLXSTTEngine()
 
-            // Load transcription engine (required)
-            if !transcriptionEngine.isLoaded {
-                try await transcriptionEngine.load()
-            }
+            // Create TTS engine
+            let ttsEngine = TTSEngine()
+
+            // Create OCR engine
+            let ocrEngine = OCREngine()
+
+            // Use ModeController to resolve the correct STT engine
+            let providerRegistry = ProviderRegistry(
+                transcriptionEngine: transcriptionEngine,
+                textGenerationEngine: textGenerationEngine,
+                embeddingEngine: embeddingEngine,
+                ocrEngine: ocrEngine,
+                ttsEngine: ttsEngine
+            )
+            let modeController = ModeController(
+                transcriptionEngine: transcriptionEngine,
+                textGenerationEngine: textGenerationEngine,
+                embeddingEngine: embeddingEngine,
+                ocrEngine: ocrEngine,
+                providerRegistry: providerRegistry,
+                mlxSTTEngine: mlxSTTEngine,
+                ttsEngine: ttsEngine
+            )
 
             // Create playback service
             let playbackService = RecordingPlaybackService()
 
-            // Create VAD filter and transcription pipeline
-            let vadFilter = VADFilter()
-            let transcriptionPipeline = TranscriptionPipeline(
-                transcriptionEngine: transcriptionEngine,
-                vadFilter: vadFilter
-            )
+            // Create transcription pipeline with resolved STT engine
+            let transcriptionPipeline = try await modeController.createTranscriptionPipeline()
 
             // Create vector search and embedding pipeline
             let vectorSearchService = VectorSearchService(database: database)
@@ -123,6 +140,9 @@ struct PlaybackMeetingContainerView: View {
                 documentRepository: documentRepo,
                 chatMessageRepository: chatRepo
             )
+
+            // Create TTS playback service
+            self.ttsPlaybackService = TTSPlaybackService(ttsEngine: ttsEngine)
 
             viewModel = PlaybackMeetingViewModel(
                 meeting: meeting,

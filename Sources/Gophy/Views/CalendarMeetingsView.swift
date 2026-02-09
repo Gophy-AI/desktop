@@ -75,11 +75,26 @@ struct CalendarMeetingsView: View {
             let chatRepo = ChatMessageRepository(database: database)
             let documentRepo = DocumentRepository(database: database)
             let eventKit = EventKitService()
+
+            var syncService: CalendarSyncService?
+            let config = GoogleCalendarConfig()
+            if config.isConfigured {
+                let authService = GoogleAuthService(config: config)
+                if await authService.isSignedIn {
+                    let apiClient = GoogleCalendarAPIClient(authService: authService)
+                    syncService = CalendarSyncService(
+                        apiClient: apiClient,
+                        eventKitService: eventKit
+                    )
+                }
+            }
+
             let vm = CalendarMeetingsViewModel(
                 meetingRepository: meetingRepo,
                 chatMessageRepository: chatRepo,
                 documentRepository: documentRepo,
-                eventKitService: eventKit
+                eventKitService: eventKit,
+                calendarSyncService: syncService
             )
             viewModel = vm
             await vm.loadMeetings()

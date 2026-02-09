@@ -29,7 +29,9 @@ public actor SystemAudioCaptureService: SystemAudioCaptureProtocol {
     private var isRunning = false
     private var continuation: AsyncStream<AudioChunk>.Continuation?
     private var startTime: TimeInterval = 0
-    
+    private var audioConverter: AVAudioConverter?
+    private var sourceFormat: AVAudioFormat?
+
     private let targetSampleRate: Double = 16000
     private let targetChannelCount: UInt32 = 1
     
@@ -71,6 +73,8 @@ public actor SystemAudioCaptureService: SystemAudioCaptureProtocol {
             self.tapID = nil
         }
         
+        audioConverter = nil
+        sourceFormat = nil
         continuation?.finish()
         continuation = nil
     }
@@ -81,22 +85,58 @@ public actor SystemAudioCaptureService: SystemAudioCaptureProtocol {
         self.continuation = continuation
         self.isRunning = true
         self.startTime = CACurrentMediaTime()
-        
+
         do {
             // Create ProcessTap for system audio
             let tap = try createProcessTap()
             self.tapID = tap
-            
+
             // Create aggregate device with the tap
             let aggregateDevice = try createAggregateDevice(with: tap)
             self.aggregateDeviceID = aggregateDevice
-            
+
+            // Detect source sample rate from the aggregate device
+            var nominalSampleRate: Float64 = 48000.0
+            var srSize = UInt32(MemoryLayout<Float64>.size)
+            var srAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyNominalSampleRate,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectGetPropertyData(aggregateDevice, &srAddress, 0, nil, &srSize, &nominalSampleRate)
+
+            // Create input format (interleaved stereo float32 at source rate)
+            guard let inputFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: nominalSampleRate,
+                channels: 2,
+                interleaved: true
+            ) else {
+                throw SystemAudioCaptureError.formatCreationFailed
+            }
+            self.sourceFormat = inputFormat
+
+            // Create output format (non-interleaved mono float32 at 16kHz)
+            guard let outputFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: targetSampleRate,
+                channels: 1,
+                interleaved: false
+            ) else {
+                throw SystemAudioCaptureError.formatCreationFailed
+            }
+
+            guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+                throw SystemAudioCaptureError.converterCreationFailed
+            }
+            self.audioConverter = converter
+
             // Set up IO proc for audio callbacks
             try setupIOProc(for: aggregateDevice)
-            
+
             // Start the device
             try startDevice(aggregateDevice)
-            
+
         } catch {
             continuation.finish()
             isRunning = false
@@ -233,77 +273,72 @@ public actor SystemAudioCaptureService: SystemAudioCaptureProtocol {
     }
 
     private func processAudioSamples(_ samplesArray: [Float], channelCount: Int, captureTime: TimeInterval) async {
-        // Convert to mono if needed (simple average of channels)
-        let monoSamples = convertToMono(samplesArray, channelCount: channelCount)
+        guard let converter = audioConverter else { return }
 
-        // Resample to 16kHz if needed (simplified - should use proper resampling)
-        let resampledSamples = resampleTo16kHz(monoSamples)
+        // Build an AVAudioPCMBuffer from the raw interleaved samples
+        let frameCount = AVAudioFrameCount(samplesArray.count / channelCount)
+        guard let inputBuffer = AVAudioPCMBuffer(
+            pcmFormat: converter.inputFormat,
+            frameCapacity: frameCount
+        ) else { return }
+        inputBuffer.frameLength = frameCount
+
+        // Copy interleaved samples into the buffer
+        if let bufferData = inputBuffer.floatChannelData {
+            samplesArray.withUnsafeBufferPointer { src in
+                guard let base = src.baseAddress else { return }
+                bufferData[0].update(from: base, count: samplesArray.count)
+            }
+        }
+
+        // Calculate output frame count
+        let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
+        let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: converter.outputFormat,
+            frameCapacity: outputFrameCount
+        ) else { return }
+
+        var error: NSError?
+        var inputConsumed = false
+        let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if inputConsumed {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            inputConsumed = true
+            outStatus.pointee = .haveData
+            return inputBuffer
+        }
+
+        guard status != .error, error == nil,
+              let outData = outputBuffer.floatChannelData else { return }
+
+        let count = Int(outputBuffer.frameLength)
+        let convertedSamples = Array(UnsafeBufferPointer(start: outData[0], count: count))
 
         // Create chunk and emit
         let timestamp = captureTime - startTime
         let chunk = AudioChunk(
-            samples: resampledSamples,
+            samples: convertedSamples,
             timestamp: timestamp,
             source: .systemAudio
         )
 
         continuation?.yield(chunk)
     }
-    
+
     // MARK: - Device Control
-    
+
     private func startDevice(_ deviceID: AudioDeviceID) throws {
         guard let ioProcID = ioProcID else {
             throw SystemAudioCaptureError.noProcID
         }
-        
+
         let status = AudioDeviceStart(deviceID, ioProcID)
         guard status == noErr else {
             throw SystemAudioCaptureError.deviceStartFailed(status)
         }
-    }
-    
-    // MARK: - Audio Processing
-
-    private func convertToMono(_ samples: [Float], channelCount: Int) -> [Float] {
-        guard channelCount > 1 else { return samples }
-        
-        let frameCount = samples.count / channelCount
-        var monoSamples = [Float](repeating: 0, count: frameCount)
-        
-        for frame in 0..<frameCount {
-            var sum: Float = 0
-            for channel in 0..<channelCount {
-                sum += samples[frame * channelCount + channel]
-            }
-            monoSamples[frame] = sum / Float(channelCount)
-        }
-        
-        return monoSamples
-    }
-    
-    private func resampleTo16kHz(_ samples: [Float]) -> [Float] {
-        // Simplified resampling using linear interpolation
-        // In production, use vDSP or AVAudioConverter for proper resampling
-        let sourceSampleRate = 48000.0
-        let ratio = sourceSampleRate / targetSampleRate
-        let outputCount = Int(Double(samples.count) / ratio)
-        
-        var resampled = [Float](repeating: 0, count: outputCount)
-        
-        for i in 0..<outputCount {
-            let sourceIndex = Double(i) * ratio
-            let index = Int(sourceIndex)
-            let fraction = Float(sourceIndex - Double(index))
-            
-            if index + 1 < samples.count {
-                resampled[i] = samples[index] * (1 - fraction) + samples[index + 1] * fraction
-            } else if index < samples.count {
-                resampled[i] = samples[index]
-            }
-        }
-        
-        return resampled
     }
     
     // MARK: - Cleanup
@@ -375,4 +410,6 @@ public enum SystemAudioCaptureError: Error, Sendable {
     case deviceStartFailed(OSStatus)
     case noProcID
     case unsupportedMacOSVersion
+    case formatCreationFailed
+    case converterCreationFailed
 }

@@ -30,3 +30,9 @@ public protocol VisionProvider: Sendable {
     func extractText(from imageData: Data, prompt: String) async throws -> String
     func analyzeImage(imageData: Data, prompt: String) -> AsyncThrowingStream<String, Error>
 }
+
+public protocol TTSProvider: Sendable {
+    func synthesize(text: String, voice: String?) async throws -> Data
+    func synthesizeStream(text: String, voice: String?) -> AsyncThrowingStream<Data, Error>
+    var sampleRate: Int { get }
+}

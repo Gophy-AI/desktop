@@ -603,8 +603,14 @@ public class VoxtralModel: Module {
         // Create model
         let model = VoxtralModel(config: config)
 
-        // Load tokenizer
-        model.tokenizer = try await AutoTokenizer.from(modelFolder: modelDir)
+        // Load tokenizer — Mistral models use tekken.json (tiktoken-style BPE),
+        // which swift-transformers' AutoTokenizer cannot parse. Use TekkenTokenizer directly.
+        let tekkenPath = modelDir.appendingPathComponent("tekken.json")
+        if FileManager.default.fileExists(atPath: tekkenPath.path) {
+            model.tokenizer = try TekkenTokenizer(url: tekkenPath)
+        } else {
+            model.tokenizer = try await AutoTokenizer.from(modelFolder: modelDir)
+        }
 
         // Load weights
         var weights: [String: MLXArray] = [:]

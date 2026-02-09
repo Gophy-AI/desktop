@@ -91,7 +91,6 @@ public final class SettingsViewModel {
     var lastCalendarSyncTime: Date?
     var isSyncingCalendar: Bool = false
     var eventKitAccessGranted: Bool = false
-    var googleClientID: String = ""
 
     private var deviceListenerTask: Task<Void, Never>?
 
@@ -418,10 +417,7 @@ public final class SettingsViewModel {
         let ekStatus = EKEventStore.authorizationStatus(for: .event)
         eventKitAccessGranted = (ekStatus == .authorized || ekStatus == .fullAccess)
 
-        if let savedClientID = defaults.string(forKey: "googleCalendarClientID"), !savedClientID.isEmpty {
-            googleClientID = savedClientID
-            ensureCalendarServices()
-        }
+        ensureCalendarServices()
 
         if eventKitService == nil {
             eventKitService = EventKitService()
@@ -433,9 +429,9 @@ public final class SettingsViewModel {
     }
 
     private func ensureCalendarServices() {
-        guard !googleClientID.isEmpty else { return }
         if authService == nil {
-            let config = GoogleCalendarConfig(clientID: googleClientID)
+            let config = GoogleCalendarConfig()
+            guard config.isConfigured else { return }
             let newAuthService = GoogleAuthService(config: config)
             authService = newAuthService
 
@@ -451,23 +447,6 @@ public final class SettingsViewModel {
         }
     }
 
-    func updateGoogleClientID(_ clientID: String) {
-        googleClientID = clientID
-        UserDefaults.standard.set(clientID, forKey: "googleCalendarClientID")
-        authService = nil
-        calendarSyncService = nil
-        if !clientID.isEmpty {
-            ensureCalendarServices()
-            Task {
-                await refreshGoogleAuthStatus()
-            }
-        } else {
-            isGoogleSignedIn = false
-            googleUserEmail = nil
-        }
-        calendarErrorMessage = nil
-    }
-
     private func refreshGoogleAuthStatus() async {
         ensureCalendarServices()
         guard let authService = authService else { return }
@@ -478,7 +457,7 @@ public final class SettingsViewModel {
     func signInGoogle() async {
         ensureCalendarServices()
         guard let authService = authService else {
-            calendarErrorMessage = "Enter a Google OAuth Client ID above to enable Google Calendar"
+            calendarErrorMessage = "Calendar service not initialized"
             return
         }
 
@@ -542,10 +521,12 @@ public final class SettingsViewModel {
         guard let syncService = calendarSyncService else { return }
 
         isSyncingCalendar = true
+        calendarErrorMessage = nil
         do {
-            _ = try await syncService.syncNow()
+            let events = try await syncService.syncNow()
             lastCalendarSyncTime = Date()
             UserDefaults.standard.set(lastCalendarSyncTime, forKey: "calendarLastSyncTime")
+            calendarErrorMessage = "Synced \(events.count) event(s)"
         } catch {
             calendarErrorMessage = "Sync failed: \(error.localizedDescription)"
         }
@@ -663,6 +644,8 @@ public final class SettingsViewModel {
             return ("selectedSTTProvider", "selectedSTTModel")
         case .vision:
             return ("selectedVisionProvider", "selectedVisionModel")
+        case .textToSpeech:
+            return ("selectedTTSProvider", "selectedTTSModel")
         }
     }
 
